@@ -139,9 +139,15 @@ export default function HowItWorksPage() {
 
         <Answer id="offline" question="Does Signal Bloom work offline?">
           <p>
-            Yes, once it has loaded. The whole game is static files and its word lists ship
-            in the bundle, so after the first visit there is nothing it needs the network
-            for.
+            Yes. A service worker caches the game and the reference pages on your first
+            visit, so after that it loads and plays with no network connection at all. The
+            whole game is static files with its word lists in the bundle, so there is
+            nothing it needs to fetch while you play.
+          </p>
+          <p>
+            When a new version is available it waits rather than replacing the running one,
+            and the status bar offers a reload. Swapping the code underneath a run in
+            progress would destroy it.
           </p>
         </Answer>
 

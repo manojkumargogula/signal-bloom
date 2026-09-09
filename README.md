@@ -108,6 +108,15 @@ needs since `event.key` depends on your layout. The two are paired through a
 50ms register; a character with no matching keypress is marked synthetic and
 kept out of the latency statistics.
 
+**A service worker is the caching layer, not just an offline feature.** GitHub
+Pages serves content-hashed bundles with a short `max-age` and gives no way to
+set headers, so a cache-first rule for `/_next/static` is a complete
+substitute for the `Cache-Control` header that cannot be sent. It deliberately
+does not call `skipWaiting` — swapping the bundle under a run in progress
+would destroy it — so an update waits and the status bar offers a reload.
+`node scripts/dev/offline.mjs` proves the offline claim by cutting the network
+and playing.
+
 **The typing surface is real DOM, not canvas.** Canvas text discards the
 accessibility tree, browser zoom, text selection and find-in-page, and renders
 softer at exactly the small sizes that matter. In a game whose whole subject is
@@ -160,6 +169,7 @@ Stated plainly, since some of them are architectural:
 
 - **History does not sync.** It is in `localStorage` on the device you played
   on, and clearing site data erases it. That is the cost of having no server.
+  It holds your last 500 runs and shows a trend across them.
 - **Onslaught does not feed your long-term statistics.** You choose which word
   to answer there, so the expected character is ambiguous and statistics built
   on it would be quietly wrong. Sprint sets your records.
@@ -173,10 +183,11 @@ Stated plainly, since some of them are architectural:
 
 ## Roadmap
 
+- [x] Offline play, verified by cutting the network and playing
+- [x] Run history with a trend line
 - [ ] Dvorak and Colemak finger maps
-- [ ] Career statistics across runs, with trend lines
+- [ ] Career per-key statistics accumulated across runs
 - [ ] More word lists, in more languages
-- [ ] Offline service worker
 - [ ] Result card as a copyable image
 
 ## Licence

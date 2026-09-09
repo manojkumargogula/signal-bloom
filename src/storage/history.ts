@@ -83,6 +83,7 @@ export function saveRun(result: RunResult): void {
   // history than anyone reads, and an unbounded blob eventually hits quota.
   while (runs.length > MAX_RUNS) runs.shift();
   write(HISTORY_KEY, { schema: SCHEMA, runs });
+  invalidateHistory();
 
   if (result.metrics.valid) updateBest(result);
 }
@@ -137,6 +138,7 @@ export function clearHistory(): void {
     // Nothing to do; the player asked to clear data that cannot be reached.
   }
   invalidateBests();
+  invalidateHistory();
 }
 
 
@@ -173,4 +175,37 @@ const EMPTY_BESTS: Bests = {};
 function invalidateBests(): void {
   bestsCache = null;
   for (const listener of bestsListeners) listener();
+}
+
+
+/**
+ * Run history as an external store.
+ *
+ * Same reasoning as the bests store above: localStorage cannot be read during
+ * render, and copying it into state through an effect gives the first paint a
+ * value already known to be wrong.
+ */
+const historyListeners = new Set<() => void>();
+
+let historyCache: HistoryEntry[] | null = null;
+
+const EMPTY_HISTORY: HistoryEntry[] = [];
+
+export function subscribeHistory(listener: () => void): () => void {
+  historyListeners.add(listener);
+  return () => historyListeners.delete(listener);
+}
+
+export function getHistorySnapshot(): HistoryEntry[] {
+  if (historyCache === null) historyCache = loadHistory();
+  return historyCache;
+}
+
+export function getHistoryServerSnapshot(): HistoryEntry[] {
+  return EMPTY_HISTORY;
+}
+
+function invalidateHistory(): void {
+  historyCache = null;
+  for (const listener of historyListeners) listener();
 }

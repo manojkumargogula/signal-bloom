@@ -11,6 +11,7 @@ import {
 } from "@/storage/history";
 import { Button } from "../ui/Button";
 import { FingerChart } from "./FingerChart";
+import { History } from "./History";
 import { Heatmap } from "./Heatmap";
 import { WpmChart } from "./WpmChart";
 
@@ -74,7 +75,7 @@ export function Results({ result, onAgain }: ResultsProps) {
   return (
     <div className="flex flex-col gap-8">
       {/* Headline */}
-      <section className="rounded-xl border border-[var(--line)] bg-[var(--bg-panel)] p-6 sm:p-8">
+      <section className="border border-[var(--line)] bg-[var(--bg-panel)] p-6 sm:p-8">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             {isBest && m.valid && (
@@ -147,21 +148,25 @@ export function Results({ result, onAgain }: ResultsProps) {
         </div>
       </section>
 
-      <section className="rounded-xl border border-[var(--line)] bg-[var(--bg-panel)] p-6">
+      <section className="border border-[var(--line)] bg-[var(--bg-panel)] p-6">
         <WpmChart series={m.series} />
       </section>
 
+      <section className="border border-[var(--line)] bg-[var(--bg-panel)] p-6">
+        <History mode={result.mode} durationMs={result.metrics.durationMs} />
+      </section>
+
       <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
-        <section className="rounded-xl border border-[var(--line)] bg-[var(--bg-panel)] p-6">
+        <section className="border border-[var(--line)] bg-[var(--bg-panel)] p-6">
           <Heatmap byCode={m.byCode} />
         </section>
-        <section className="rounded-xl border border-[var(--line)] bg-[var(--bg-panel)] p-6">
+        <section className="border border-[var(--line)] bg-[var(--bg-panel)] p-6">
           <FingerChart byFinger={m.byFinger} />
         </section>
       </div>
 
       {(m.problemKeys.length > 0 || m.problemBigrams.length > 0) && (
-        <section className="grid gap-6 rounded-xl border border-[var(--line)] bg-[var(--bg-panel)] p-6 sm:grid-cols-2">
+        <section className="grid gap-6 border border-[var(--line)] bg-[var(--bg-panel)] p-6 sm:grid-cols-2">
           <ProblemList
             title="Keys costing you time"
             note="Ranked by estimated time lost, combining hesitation with a confidence-weighted error rate."
@@ -175,7 +180,7 @@ export function Results({ result, onAgain }: ResultsProps) {
         </section>
       )}
 
-      <section className="rounded-xl border border-[var(--line)] bg-[var(--bg-panel)] p-6">
+      <section className="border border-[var(--line)] bg-[var(--bg-panel)] p-6">
         <h3 className="text-sm font-semibold text-[var(--fg)]">What went wrong</h3>
         <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-4">
           <Figure label="Substitutions" value={String(m.errorEvents.substitution)} />

@@ -41,7 +41,7 @@ const FAQ: { id: string; question: string; answer: string }[] = [
     id: "data",
     question: "Where is my typing data stored?",
     answer:
-      "All of it stays in your browser's localStorage on the device you played on. Signal Bloom has no server and no database, so nothing you type is sent anywhere. The trade-off is that your history does not follow you to another device or browser, and clearing your site data erases it.",
+      "All of it stays in your browser's localStorage on the device you played on. Signal Bloom has no server and no database, so nothing you type is sent anywhere. It keeps your last 500 runs and shows a trend across them. The trade-off is that your history does not follow you to another device or browser, and clearing your site data erases it.",
   },
   {
     id: "tracking",
@@ -71,7 +71,7 @@ const FAQ: { id: string; question: string; answer: string }[] = [
     id: "offline",
     question: "Can I play Signal Bloom offline?",
     answer:
-      "Yes, once the page has loaded. The entire game is static files and the word lists are included in the bundle, so it needs no network connection to play.",
+      "Yes. A service worker caches the game on your first visit, so after that it loads and plays with no network connection at all, including the reference pages. The whole game is static files with its word lists in the bundle, so there is nothing it needs to fetch while you play.",
   },
   {
     id: "trust",
@@ -83,7 +83,7 @@ const FAQ: { id: string; question: string; answer: string }[] = [
     id: "reset",
     question: "How do I reset my run history?",
     answer:
-      "Clear the site data for Signal Bloom in your browser's settings, which removes every stored run and personal best. Because the history lives only in your browser, there is nothing stored elsewhere to delete.",
+      "There is a \u201cClear all history\u201d button under the table of past runs on the results screen, which removes every stored run and personal best. Clearing the site data for Signal Bloom in your browser does the same thing. Because the history lives only in your browser, there is nothing stored elsewhere to delete.",
   },
   {
     id: "accuracy-harsh",
