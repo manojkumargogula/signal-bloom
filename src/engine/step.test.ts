@@ -335,3 +335,75 @@ describe("GameEngine", () => {
     expect(engine.getSnapshot()).toBe(first);
   });
 });
+
+describe("live speed readout", () => {
+  const typeInto = (engine: GameEngine, count: number, startAt: number, gapMs: number) => {
+    let t = startAt;
+    for (let i = 0; i < count; i++) {
+      const snap = engine.getSnapshot();
+      const target = snap.targets[snap.wordIndex] ?? "";
+      const ch = target[snap.charIndex];
+      if (ch === undefined) break;
+      t += gapMs;
+      engine.handleChar(ch, t, "KeyA");
+    }
+    return t;
+  };
+
+  it("holds Zen speed steady across a long pause", () => {
+    // Both a cumulative average and a trailing wall-clock window collapse to
+    // near zero during a pause, which in an untimed mode punishes exactly the
+    // pausing the mode exists to allow. The rate has to describe the typing,
+    // not the elapsed time.
+    const zen = new GameEngine({ mode: "zen", seed: "zen-window", corpusId: "en-common" });
+    zen.start(0);
+    const after = typeInto(zen, 60, 0, 100);
+    const before = zen.getSnapshot().wpm;
+
+    // 100ms per keystroke is 120 WPM at five characters to the word.
+    expect(before).toBeGreaterThan(100);
+    expect(before).toBeLessThan(140);
+
+    // Two minutes of thinking, then one more keystroke.
+    zen.handleChar(" ", after + 120_000, null);
+    const during = zen.getSnapshot().wpm;
+
+    // The figure is older, not smaller.
+    expect(during).toBeGreaterThan(before * 0.8);
+  });
+
+  it("reports the typing rate in Zen, not the session average", () => {
+    // Someone who types a burst, thinks for a while, then types another burst
+    // at the same speed should read the same rate both times.
+    const zen = new GameEngine({ mode: "zen", seed: "zen-bursts", corpusId: "en-common" });
+    zen.start(0);
+
+    let t = typeInto(zen, 40, 0, 120);
+    const firstBurst = zen.getSnapshot().wpm;
+
+    t += 45_000; // a long think
+    typeInto(zen, 40, t, 120);
+    const secondBurst = zen.getSnapshot().wpm;
+
+    expect(firstBurst).toBeGreaterThan(80);
+    expect(secondBurst).toBeCloseTo(firstBurst, 0);
+  });
+
+  it("keeps Sprint cumulative, because the whole-run average is the result", () => {
+    const sprint = new GameEngine({
+      mode: "sprint",
+      seed: "sprint-cumulative",
+      corpusId: "en-common",
+      durationMs: 120_000,
+    });
+    sprint.start(0);
+    const after = typeInto(sprint, 60, 0, 100);
+    const before = sprint.getSnapshot().wpm;
+
+    sprint.handleChar(" ", after + 30_000, null);
+    const during = sprint.getSnapshot().wpm;
+
+    // Idle time genuinely lowers a timed result and must keep doing so.
+    expect(during).toBeLessThan(before / 2);
+  });
+});

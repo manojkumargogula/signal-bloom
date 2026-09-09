@@ -76,7 +76,7 @@ export function Game({
           x: at.x,
           y: at.y,
           power: event.perfect ? 1 : 0.6,
-          colour: readColour(event.entity.kind === "carrier" ? "--flare" : "--ion"),
+          colour: readColour(event.entity.kind === "carrier" ? "--amber" : "--amber-dim"),
         });
       }
       // The signature effect: the decoded word pushes a real echo out across

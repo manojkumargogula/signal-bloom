@@ -13,7 +13,8 @@
     "test:engine": "vitest run --project engine",
     "gen": "node scripts/gen-lastmod.mjs && node scripts/gen-icons.mjs",
     "prebuild": "pnpm gen",
-    "contrast": "node scripts/check-contrast.mjs"
+    "contrast": "node scripts/check-contrast.mjs",
+    "postbuild": "node scripts/stamp-sw.mjs"
   },
   "dependencies": {
     "next": "16.3.4",

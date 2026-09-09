@@ -48,6 +48,23 @@ for (const required of ["/sitemap.xml", "/robots.txt", "/manifest.webmanifest", 
   if (!files.some((f) => rel(f) === required)) fail(`missing ${required}`);
 }
 
+// 3b. the service worker, which is what makes the offline claim in the README
+//     and the FAQ true rather than merely plausible.
+{
+  const sw = files.find((f) => rel(f) === "/sw.js");
+  if (!sw) {
+    fail("missing /sw.js — the README and FAQ both promise offline play");
+  } else {
+    const body = readFileSync(sw, "utf8");
+    if (body.includes("__BUILD_ID__")) {
+      fail("/sw.js was not stamped — its caches would never invalidate on deploy");
+    }
+    if (BASE_PATH && !body.includes('new URL("./", self.location)')) {
+      fail("/sw.js must resolve its scope from its own location to work under a base path");
+    }
+  }
+}
+
 // 4. canonicals must be absolute, carry the base path exactly once, and end
 //    with a slash. `trailingSlash` means Pages redirects the slashless form,
 //    so a canonical without one names a URL that redirects.

@@ -5,7 +5,8 @@
  * never drift from the values actually shipped, then asserts every pair that
  * carries text. Runs in CI; a failing pair fails the build.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 const css = readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
 
@@ -93,5 +94,58 @@ for (const [name, vars] of THEMES) {
   );
 }
 
-console.log(failed === 0 ? "\nAll contrast pairs pass.\n" : `\n${failed} contrast failure(s).\n`);
+// Every custom property a component references must actually be defined.
+//
+// Replacing the palette once left nine references to deleted tokens behind,
+// which browsers resolve to nothing and render as an invalid colour -- no
+// error, no warning, just a component quietly losing its colour. Cheap to
+// catch, invisible otherwise.
+{
+  const defined = new Set(
+    [...css.matchAll(/^\s+(--[\w-]+):/gm)].map((m) => m[1]),
+  );
+
+  const sources = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (/\.(tsx?|css)$/.test(entry.name) && !full.endsWith("globals.css")) {
+        sources.push(full);
+      }
+    }
+  };
+  walk(new URL("../src", import.meta.url).pathname);
+
+  const missing = new Map();
+  for (const file of sources) {
+    const body = readFileSync(file, "utf8");
+    for (const match of body.matchAll(/var\((--[\w-]+)/g)) {
+      const token = match[1];
+      if (defined.has(token)) continue;
+      if (!missing.has(token)) missing.set(token, new Set());
+      missing.get(token).add(file.replace(/^.*\/src\//, "src/"));
+    }
+    // Tailwind arbitrary values, e.g. text-[var(--amber)], are caught above;
+    // readColour("--amber") style lookups are matched here.
+    for (const match of body.matchAll(/readColour\(\s*"(--[\w-]+)"/g)) {
+      const token = match[1];
+      if (defined.has(token)) continue;
+      if (!missing.has(token)) missing.set(token, new Set());
+      missing.get(token).add(file.replace(/^.*\/src\//, "src/"));
+    }
+  }
+
+  if (missing.size > 0) {
+    console.log("\n  undefined design tokens referenced:");
+    for (const [token, files] of missing) {
+      console.log(`    FAIL  ${token}  used in ${[...files].join(", ")}`);
+      failed++;
+    }
+  } else {
+    console.log(`\n  all referenced tokens are defined (${defined.size} in the palette)`);
+  }
+}
+
+console.log(failed === 0 ? "\nAll checks pass.\n" : `\n${failed} failure(s).\n`);
 process.exit(failed === 0 ? 0 : 1);

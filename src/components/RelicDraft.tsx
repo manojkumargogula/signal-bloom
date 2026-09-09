@@ -5,10 +5,30 @@ import type { Rarity } from "@/engine/relics/types";
 import { Button, Kbd } from "./ui/Button";
 import { useEffect } from "react";
 
+/**
+ * Rarity is signalled by weight, not by hue.
+ *
+ * The palette has exactly one accent, so three rarity colours are not
+ * available -- and inventing them would make the amber mean less. Common is
+ * quiet, rare gets the accent on its label, epic gets a filled accent border.
+ * Each also carries its name in text, so rarity is never colour-alone.
+ */
 const RARITY_STYLE: Record<Rarity, { border: string; text: string; label: string }> = {
-  common: { border: "border-[var(--line-strong)]", text: "text-[var(--fg-muted)]", label: "Common" },
-  rare: { border: "border-[var(--plasma)]", text: "text-[var(--plasma)]", label: "Rare" },
-  epic: { border: "border-[var(--flare)]", text: "text-[var(--flare)]", label: "Epic" },
+  common: {
+    border: "border-[var(--line)]",
+    text: "text-[var(--fg-faint)]",
+    label: "Common",
+  },
+  rare: {
+    border: "border-[var(--line-strong)]",
+    text: "text-[var(--amber-dim)]",
+    label: "Rare",
+  },
+  epic: {
+    border: "border-[var(--amber)]",
+    text: "text-[var(--amber)]",
+    label: "Epic",
+  },
 };
 
 interface RelicDraftProps {
@@ -51,7 +71,7 @@ export function RelicDraft({ offers, wave, onPick, onSkip }: RelicDraftProps) {
       className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-6 bg-[var(--bg)]/92 p-6"
     >
       <div className="text-center">
-        <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-[var(--ion)]">
+        <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-[var(--amber)]">
           Wave {wave - 1} cleared
         </p>
         <h2 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--fg)]">
@@ -71,7 +91,7 @@ export function RelicDraft({ offers, wave, onPick, onSkip }: RelicDraftProps) {
                 onClick={() => onPick(id)}
                 className={[
                   "group flex h-full w-full flex-col gap-2 rounded-lg border bg-[var(--bg-panel)] p-4 text-left",
-                  "transition-colors duration-150 hover:border-[var(--ion)]",
+                  "transition-colors duration-150 hover:border-[var(--amber)]",
                   style.border,
                 ].join(" ")}
               >

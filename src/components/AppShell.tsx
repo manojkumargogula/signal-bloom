@@ -7,6 +7,7 @@ import { makeSeed } from "@/engine/rng";
 import type { RunResult } from "@/engine/GameEngine";
 import type { ModeId } from "@/engine/types";
 import { useIsClient } from "@/react/useIsClient";
+import { useServiceWorker } from "@/react/useServiceWorker";
 import { useTheme } from "@/react/useTheme";
 import { saveRun } from "@/storage/history";
 import { Game } from "./Game";
@@ -52,6 +53,7 @@ export function AppShell() {
   const [durationMs, setDurationMs] = useState(30_000);
   const [result, setResult] = useState<RunResult | null>(null);
   const { resolved, cycle } = useTheme();
+  const { update, applyUpdate } = useServiceWorker();
   const shellRef = useRef<HTMLDivElement>(null);
 
   // A run's seed is random, and the word list is derived from it, so the
@@ -161,7 +163,19 @@ export function AppShell() {
 
       {/* ------------------------------------------------------ status bar -- */}
       <footer className="flex shrink-0 items-center justify-between gap-4 border-t border-[var(--line)] px-4 py-2 text-xs text-[var(--fg-muted)]">
-        <span>{result ? "Run complete." : MODE_HINT[mode]}</span>
+        {update === "available" ? (
+          <span className="flex items-center gap-2">
+            <span className="text-[var(--amber)]">A new version is ready.</span>
+            <button
+              onClick={applyUpdate}
+              className="border border-[var(--amber)] px-2 py-0.5 text-[var(--amber)] transition-colors hover:bg-[var(--amber)] hover:text-[var(--bg)]"
+            >
+              Reload
+            </button>
+          </span>
+        ) : (
+          <span>{result ? "Run complete." : MODE_HINT[mode]}</span>
+        )}
 
         <div className="flex items-center gap-4">
           <span className="hidden items-center gap-1.5 sm:flex">

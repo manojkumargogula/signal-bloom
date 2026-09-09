@@ -78,12 +78,12 @@ export function Results({ result, onAgain }: ResultsProps) {
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             {isBest && m.valid && (
-              <p className="mb-1 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-[var(--flare)]">
+              <p className="mb-1 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-[var(--amber)]">
                 Personal best
               </p>
             )}
             <div className="flex items-baseline gap-3">
-              <span className="num text-6xl font-semibold leading-none text-[var(--ion)] sm:text-7xl">
+              <span className="num text-6xl font-semibold leading-none text-[var(--amber)] sm:text-7xl">
                 {Math.round(m.wpm)}
               </span>
               <span className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--fg-faint)]">
@@ -118,7 +118,7 @@ export function Results({ result, onAgain }: ResultsProps) {
         )}
 
         {!m.valid && (
-          <p className="mt-4 rounded-md border border-[var(--flare)]/40 bg-[var(--flare)]/10 px-4 py-3 text-sm text-[var(--fg)]">
+          <p className="mt-4 border border-[var(--amber)]/40 bg-[var(--amber)]/10 px-4 py-3 text-sm text-[var(--fg)]">
             <strong className="font-semibold">Not counted.</strong>{" "}
             {invalidExplanation(m.invalidReasons)} The numbers above are still real; this run just
             will not set a record or feed your key statistics.
@@ -253,7 +253,7 @@ function ProblemList({
               {(item.accuracy * 100).toFixed(0)}% over {item.attempts}
               {item.meanLatency !== null && ` · ${Math.round(item.meanLatency)}ms`}
             </span>
-            <span className="num shrink-0 text-[var(--flare)]">
+            <span className="num shrink-0 text-[var(--amber-dim)]">
               −{Math.round(item.costMs)}ms
             </span>
           </li>

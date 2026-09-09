@@ -75,6 +75,19 @@ export interface EngineOptions extends RunConfig {
 
 const HUD_INTERVAL_MS = 100;
 
+/**
+ * How much recent typing Zen's live speed is measured over. Long enough to
+ * read steadily, short enough to reflect what the player is doing now.
+ */
+const ZEN_WINDOW_MS = 30_000;
+
+/**
+ * Gaps longer than this are thinking, not typing, and are excluded from the
+ * live rate. Matches the outlier threshold the analytics layer uses for
+ * per-key latency, so the two agree about what counts as a keystroke.
+ */
+const LIVE_GAP_LIMIT_MS = 1500;
+
 export class GameEngine {
   readonly state: GameState;
   readonly config: RunConfig;
@@ -94,7 +107,7 @@ export class GameEngine {
   private bursts: { x: number; y: number; z: number; kind: string }[] = [];
 
   private startedAtWall = 0;
-  private startedAtPerf = 0;
+  private startedAtPerf: number | null = null;
   private endedAtPerf: number | null = null;
   private wpmUnit: WpmUnit;
   /** Set when the current word has had a mistake, so "perfect" is knowable. */
@@ -218,19 +231,38 @@ export class GameEngine {
    * Cheap live speed and accuracy for the HUD.
    *
    * Deliberately not `computeMetrics`: that walks the whole log and is meant
-   * to run once, at the end. Running it ten times a second would put an
-   * O(n) pass on the critical path of a game loop.
+   * to run once, at the end. Running it ten times a second would put an O(n)
+   * pass on the critical path of a game loop.
+   *
+   * Zen reports the rate at which the player is TYPING, not the rate averaged
+   * over the session. Two things were tried before this and both were wrong.
+   * A cumulative average decays toward zero the moment someone stops to
+   * think, which in an untimed mode punishes exactly the pausing the mode
+   * exists to allow. A trailing wall-clock window has the same failure for
+   * the same reason -- after two minutes of thinking, the last thirty seconds
+   * contain nothing.
+   *
+   * So Zen sums the intervals between recent keystrokes and drops any gap
+   * longer than the analytics layer's outlier threshold, which is the same
+   * convention used for per-key latency. A pause makes the figure older, not
+   * smaller, and the readout holds the speed the player was actually typing
+   * at. The timed modes stay cumulative, because there the average over the
+   * whole run IS the result and idle time genuinely costs you.
    */
   private liveMetrics(): { wpm: number; accuracy: number } {
     const elapsed = this.elapsedMs();
     if (elapsed <= 0) return { wpm: 0, accuracy: 100 };
-    if (this.recorder.log.length === 0) return { wpm: 0, accuracy: 100 };
+
+    const log = this.recorder.log;
+    if (log.length === 0) return { wpm: 0, accuracy: 100 };
+
+    const charsPerWord = CHARS_PER_WORD[this.wpmUnit];
 
     let correct = 0;
     let firstPresses = 0;
     let firstCorrect = 0;
 
-    for (const k of this.recorder.log) {
+    for (const k of log) {
       if (k.kind !== "insert") continue;
       if (k.correct) correct++;
       if (k.firstPress) {
@@ -239,16 +271,47 @@ export class GameEngine {
       }
     }
 
-    const charsPerWord = CHARS_PER_WORD[this.wpmUnit];
-    const minutes = elapsed / 60_000;
-    return {
-      wpm: minutes > 0 ? correct / charsPerWord / minutes : 0,
-      accuracy: firstPresses === 0 ? 100 : (firstCorrect / firstPresses) * 100,
-    };
+    const accuracy = firstPresses === 0 ? 100 : (firstCorrect / firstPresses) * 100;
+
+    if (this.state.mode !== "zen") {
+      const wpm = correct / charsPerWord / (elapsed / 60_000);
+      return { wpm: Number.isFinite(wpm) ? wpm : 0, accuracy };
+    }
+
+    // Walk backwards over recent keystrokes, summing only the intervals that
+    // represent typing rather than thinking, until enough of them to be
+    // steady have been counted.
+    let countedMs = 0;
+    let countedChars = 0;
+    let next: number | null = null;
+
+    for (let i = log.length - 1; i >= 0 && countedMs < ZEN_WINDOW_MS; i--) {
+      const k = log[i];
+      if (k.kind !== "insert") continue;
+
+      if (next !== null) {
+        const gap = next - k.tActive;
+        if (gap > 0 && gap <= LIVE_GAP_LIMIT_MS) {
+          countedMs += gap;
+          if (k.correct) countedChars++;
+        }
+      }
+      next = k.tActive;
+    }
+
+    // Under a second of counted typing says nothing yet; fall back to the
+    // session average rather than extrapolating from two keystrokes.
+    if (countedMs < 1000) {
+      const wpm = correct / charsPerWord / (elapsed / 60_000);
+      return { wpm: Number.isFinite(wpm) ? wpm : 0, accuracy };
+    }
+
+    const wpm = countedChars / charsPerWord / (countedMs / 60_000);
+    return { wpm: Number.isFinite(wpm) ? wpm : 0, accuracy };
   }
 
   private elapsedMs(): number {
-    if (this.startedAtPerf === 0) return 0;
+    if (this.startedAtPerf === null) return 0;
     const end = this.endedAtPerf ?? this.nowRef;
     return Math.max(0, end - this.startedAtPerf - this.recorder.pausedMs);
   }
@@ -258,7 +321,7 @@ export class GameEngine {
 
   timeLeftMs(): number | null {
     if (this.state.mode !== "sprint" || !this.config.durationMs) return null;
-    if (this.startedAtPerf === 0) return this.config.durationMs;
+    if (this.startedAtPerf === null) return this.config.durationMs;
     return Math.max(0, this.config.durationMs - this.elapsedMs());
   }
 
@@ -366,7 +429,7 @@ export class GameEngine {
 
     // Sprint ends on its own clock, independent of the simulation.
     if (this.state.mode === "sprint" && this.config.durationMs) {
-      if (this.startedAtPerf > 0 && this.elapsedMs() >= this.config.durationMs) {
+      if (this.startedAtPerf !== null && this.elapsedMs() >= this.config.durationMs) {
         this.finish(now);
         return 0;
       }
