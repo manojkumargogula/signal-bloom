@@ -4,8 +4,10 @@ import { resetTimestampCalibration } from "./timestamp";
 
 function setup(opts: { fullscreen?: boolean; accepting?: boolean } = {}) {
   resetTimestampCalibration();
-  document.body.innerHTML = '<input id="host" />';
+  document.body.innerHTML =
+    '<div id="surface"><button id="btn">x</button></div><input id="host" /><input id="other" />';
   const input = document.getElementById("host") as HTMLInputElement;
+  const surface = document.getElementById("surface") as HTMLElement;
 
   const handlers: InputHandlers = {
     onChar: vi.fn(),
@@ -18,14 +20,18 @@ function setup(opts: { fullscreen?: boolean; accepting?: boolean } = {}) {
   let clock = 1000;
   const detach = attachInputRouter({
     input,
+    surface,
     handlers,
     isFullscreen: () => opts.fullscreen ?? false,
     isAccepting: () => opts.accepting ?? true,
     now: () => clock,
   });
 
+  input.focus();
+
   return {
     input,
+    surface,
     handlers,
     detach,
     tick: (ms: number) => (clock += ms),
@@ -195,12 +201,16 @@ describe("input router", () => {
     s.detach();
   });
 
-  it("still blocks page scroll when focus has escaped the input", () => {
-    // With focus elsewhere there is no beforeinput to lose, so the scroll
-    // guard is safe and worth keeping.
+  it("blocks page scroll on space when focus has escaped, and still types it", () => {
+    // With focus elsewhere there is no beforeinput to lose, so cancelling the
+    // keydown is safe -- and the recovery path types the space itself rather
+    // than dropping the most common character in the language.
     const s = setup();
+    (document.getElementById("other") as HTMLInputElement).focus();
+
     const event = s.keydown({ key: " ", code: "Space" });
     expect(event.defaultPrevented).toBe(true);
+    expect((s.handlers.onChar as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe(" ");
     s.detach();
   });
 
@@ -253,5 +263,100 @@ describe("input router", () => {
     expect(s.handlers.onChar).not.toHaveBeenCalled();
     s.keydown({ key: "Escape" });
     expect(s.handlers.onPause).not.toHaveBeenCalled();
+  });
+});
+
+describe("focus recovery", () => {
+  beforeEach(() => resetTimestampCalibration());
+
+  it("types the first keystroke even when focus has escaped", () => {
+    // The failure this exists for: the text channel only fires while the
+    // hidden input holds focus, so a browser notification bar or a click on
+    // the address bar silently killed typing with no symptom beyond nothing
+    // happening. Focusing once on mount is not enough.
+    const s = setup();
+    (document.getElementById("other") as HTMLInputElement).focus();
+    expect(document.activeElement).not.toBe(s.input);
+
+    s.keydown({ key: "a", code: "KeyA" });
+
+    // The keystroke is not dropped...
+    expect(s.handlers.onChar).toHaveBeenCalledTimes(1);
+    const [char, , code, synthetic] = (s.handlers.onChar as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(char).toBe("a");
+    expect(code).toBe("KeyA");
+    expect(synthetic).toBe(false);
+    // ...and focus is back, so the next one goes through the normal channel.
+    expect(document.activeElement).toBe(s.input);
+    s.detach();
+  });
+
+  it("does not count a recovered keystroke twice", () => {
+    // Browsers disagree about whether a keydown that moves focus still
+    // delivers its text to the newly focused element.
+    const s = setup();
+    (document.getElementById("other") as HTMLInputElement).focus();
+
+    s.keydown({ key: "b", code: "KeyB" }, 1000);
+    s.beforeinput("insertText", "b", 1010);
+
+    expect(s.handlers.onChar).toHaveBeenCalledTimes(1);
+    s.detach();
+  });
+
+  it("still records a genuine repeat of the same character", () => {
+    // "bb" is a real thing to type, so the duplicate guard has to be narrow.
+    const s = setup();
+    (document.getElementById("other") as HTMLInputElement).focus();
+
+    s.keydown({ key: "b", code: "KeyB" }, 1000);
+    s.beforeinput("insertText", "b", 1200); // well past the pairing window
+
+    expect(s.handlers.onChar).toHaveBeenCalledTimes(2);
+    s.detach();
+  });
+
+  it("restores focus on a click in the play area", () => {
+    // On pointerup rather than pointerdown: the browser moves focus during
+    // mousedown's default action, which runs after a pointerdown listener, so
+    // refocusing there is immediately undone.
+    const s = setup();
+    (document.getElementById("other") as HTMLInputElement).focus();
+
+    s.surface.dispatchEvent(new Event("pointerup", { bubbles: true }));
+    expect(document.activeElement).toBe(s.input);
+    s.detach();
+  });
+
+  it("leaves a real control its own focus", () => {
+    // A button needs focus to be operable; the keydown path takes it back on
+    // the next keystroke anyway.
+    const s = setup();
+    const button = document.getElementById("btn") as HTMLButtonElement;
+    button.focus();
+
+    button.dispatchEvent(new Event("pointerup", { bubbles: true }));
+    expect(document.activeElement).toBe(button);
+    s.detach();
+  });
+
+  it("restores focus when the window regains it", () => {
+    const s = setup();
+    (document.getElementById("other") as HTMLInputElement).focus();
+
+    window.dispatchEvent(new Event("focus"));
+    expect(document.activeElement).toBe(s.input);
+    s.detach();
+  });
+
+  it("does not type while paused, even unfocused", () => {
+    const s = setup({ accepting: false });
+    (document.getElementById("other") as HTMLInputElement).focus();
+
+    s.keydown({ key: "a", code: "KeyA" });
+    expect(s.handlers.onChar).not.toHaveBeenCalled();
+    // But focus still comes back, so resuming works.
+    expect(document.activeElement).toBe(s.input);
+    s.detach();
   });
 });

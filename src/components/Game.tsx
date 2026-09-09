@@ -180,6 +180,7 @@ export function Game({
 
     const detach = attachInputRouter({
       input,
+      surface: shellRef.current,
       isFullscreen: () => document.fullscreenElement !== null,
       isAccepting: () =>
         engine.state.phase === "running" || engine.state.phase === "idle",
@@ -356,7 +357,11 @@ export function Game({
       <p ref={announceRef} className="visually-hidden" aria-live="polite" aria-atomic="true" />
 
       {phase === "idle" && (
-        <Overlay title="Awaiting input" hint="Start typing to open the channel." />
+        <Overlay
+          title="Awaiting input"
+          hint="Start typing to open the channel."
+          aside="Nothing happening? Click anywhere on the board first."
+        />
       )}
 
       {phase === "paused" && (
@@ -378,15 +383,24 @@ export function Game({
   );
 }
 
-function Overlay({ title, hint }: { title: string; hint: string }) {
+function Overlay({
+  title,
+  hint,
+  aside,
+}: {
+  title: string;
+  hint: string;
+  aside?: string;
+}) {
   return (
     <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[var(--bg)]/85">
       {/* A solid panel, not a translucent wash. An overlay laid straight over
           the typing surface leaves its own text competing with the words
           underneath and neither is readable. */}
-      <div className="flex flex-col items-center gap-2 border border-[var(--line-strong)] bg-[var(--bg-panel)] px-8 py-6">
+      <div className="flex flex-col items-center gap-2 border border-[var(--line-strong)] bg-[var(--bg-panel)] px-8 py-6 text-center">
         <p className="label text-[var(--amber)]">{title}</p>
         <p className="text-sm text-[var(--fg-muted)]">{hint}</p>
+        {aside && <p className="mt-1 text-xs text-[var(--fg-faint)]">{aside}</p>}
       </div>
     </div>
   );

@@ -38,18 +38,30 @@ export interface RouterOptions {
   isFullscreen: () => boolean;
   /** Blocks input while paused or drafting, without tearing the listeners down. */
   isAccepting: () => boolean;
+  /**
+   * The play area. A pointerdown anywhere inside it restores focus to the
+   * capture input, so a stray click is recoverable by clicking back.
+   */
+  surface?: HTMLElement | null;
   now?: () => number;
 }
 
 const PAIR_WINDOW_MS = 50;
 
 export function attachInputRouter(options: RouterOptions): () => void {
-  const { input, handlers, isFullscreen, isAccepting } = options;
+  const { input, handlers, isFullscreen, isAccepting, surface } = options;
   const now = options.now ?? (() => performance.now());
 
   let pendingCode: string | null = null;
   let pendingAt = 0;
   let composing = false;
+
+  /**
+   * A character already handled from keydown because the input had lost
+   * focus. If the browser then also delivers it to the newly focused input,
+   * this swallows the duplicate.
+   */
+  let recovered: { char: string; at: number } | null = null;
 
   const takeCode = (t: number): string | null => {
     if (pendingCode === null) return null;
@@ -57,6 +69,12 @@ export function attachInputRouter(options: RouterOptions): () => void {
     const code = fresh ? pendingCode : null;
     pendingCode = null;
     return code;
+  };
+
+  const hasFocus = (): boolean => document.activeElement === input;
+
+  const refocus = (): void => {
+    if (!hasFocus()) input.focus({ preventScroll: true });
   };
 
   const onKeyDown = (event: KeyboardEvent): void => {
@@ -90,18 +108,27 @@ export function attachInputRouter(options: RouterOptions): () => void {
         pendingCode = event.code || null;
         pendingAt = t;
 
+        // If focus has escaped, no beforeinput is coming, so this keystroke
+        // would be dropped and the player would be stuck with a game that
+        // does not respond. Handle it here and take focus back, so recovery
+        // costs nothing and needs no click.
+        if (!hasFocus()) {
+          refocus();
+          if (isAccepting() && intent.char !== undefined) {
+            recovered = { char: intent.char, at: t };
+            handlers.onChar(intent.char, t, event.code || null, false);
+          }
+          // Space would scroll the page, and with focus elsewhere there is no
+          // text field absorbing it.
+          if (intent.preventDefault) event.preventDefault();
+          return;
+        }
+
         // Do NOT preventDefault here while the capture input has focus.
         // Cancelling a keydown cancels the browser's text insertion, so
         // beforeinput never fires and the character is silently lost. That is
         // exactly what happened to every space: the scroll guard swallowed
         // the most common character in the language.
-        //
-        // A focused text input already absorbs space without scrolling the
-        // page, so the guard is only needed when focus has escaped -- and in
-        // that case there is no beforeinput to lose.
-        if (intent.preventDefault && event.target !== input) {
-          event.preventDefault();
-        }
         return;
       default:
         return;
@@ -143,6 +170,15 @@ export function attachInputRouter(options: RouterOptions): () => void {
       const data = ie.data ?? "";
       event.preventDefault();
       if (composing && ie.inputType === "insertCompositionText") return;
+
+      // Browsers disagree about whether a keydown that moves focus still
+      // delivers its text to the newly focused element. If it does, this is
+      // the same keystroke the recovery path already handled.
+      if (recovered && recovered.char === data && t - recovered.at <= PAIR_WINDOW_MS) {
+        recovered = null;
+        return;
+      }
+      recovered = null;
 
       // A commit can carry more than one character: an IME phrase, or a
       // browser expanding an autocorrect. Each is scored individually.
@@ -187,8 +223,33 @@ export function attachInputRouter(options: RouterOptions): () => void {
     handlers.onPaste();
   };
 
+  // Clicking anywhere in the play area hands focus back, so the caret is
+  // live and a mobile keyboard appears without needing a keystroke first.
+  //
+  // On pointerUP, not pointerdown: the browser moves focus as part of
+  // mousedown's default action, which runs after a pointerdown listener --
+  // so refocusing there is immediately undone. This is also why it is not
+  // worth preventing the default instead: that would break text selection.
+  const onPointerUp = (event: Event): void => {
+    // Leave real controls alone. A button needs its own focus to be
+    // operable, and the keydown recovery above takes focus back on the next
+    // keystroke anyway.
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("button, a, input, select, textarea, [role='dialog']")) return;
+    refocus();
+  };
+
+  // Returning to the tab or the window should not require a click either.
+  const onWindowFocus = (): void => refocus();
+  const onVisibility = (): void => {
+    if (!document.hidden) refocus();
+  };
+
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keydown", onPauseKey);
+  window.addEventListener("focus", onWindowFocus);
+  document.addEventListener("visibilitychange", onVisibility);
+  (surface ?? document).addEventListener("pointerup", onPointerUp);
   input.addEventListener("beforeinput", onBeforeInput);
   input.addEventListener("input", onInput);
   input.addEventListener("compositionstart", onCompositionStart);
@@ -198,6 +259,9 @@ export function attachInputRouter(options: RouterOptions): () => void {
   return () => {
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("keydown", onPauseKey);
+    window.removeEventListener("focus", onWindowFocus);
+    document.removeEventListener("visibilitychange", onVisibility);
+    (surface ?? document).removeEventListener("pointerup", onPointerUp);
     input.removeEventListener("beforeinput", onBeforeInput);
     input.removeEventListener("input", onInput);
     input.removeEventListener("compositionstart", onCompositionStart);

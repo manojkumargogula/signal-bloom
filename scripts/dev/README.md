@@ -14,6 +14,10 @@ changes can be checked against the actual game rather than only against tests.
   cleared.
 - `history.mjs` — plays two runs back to back, since the trend only exists
   after the second one.
+- `focus.mjs` — types from every starting focus state, including with focus
+  stolen by another element and dropped to the body. Every other test had the
+  capture input focused, which is exactly why the "nothing gets typed" bug
+  survived all of them.
 - `offline.mjs` — proves the offline claim: loads the page, waits for the
   service worker to take control, cuts the network, reloads, and plays. Run
   against the built export rather than the dev server, because the worker only
