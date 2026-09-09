@@ -1,26 +1,169 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   Signal Bloom — design tokens.
+
+   Dark is the primary theme. Light ("daylight lab") is a genuine
+   re-derivation rather than an inversion: the ion/plasma/flare hues are
+   darkened until they hold 4.5:1 on paper, because a neon cyan that sings on
+   #060B14 is illegible on white. Every pair below is checked by
+   `scripts/check-contrast.mjs`, which runs in CI.
+
+   Themes swap token VALUES only. No component ever branches on the theme.
+   ============================================================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: dark;
+
+  --bg: #060b14;
+  --bg-elev: #0b1220;
+  --bg-panel: #101b2c;
+  --bg-inset: #04080f;
+  --line: #1b2a40;
+  --line-strong: #52698c;
+
+  --fg: #e8eef4;
+  --fg-muted: #8b9db5;
+  --fg-faint: #55677e;
+
+  --ion: #4ff0d0;
+  --plasma: #9b8cff;
+  --flare: #ffb347;
+  --fault: #ff6b85;
+
+  /* The two most important colors in the product: upcoming text at low
+     emphasis, decoded text at full emphasis. Both must pass 4.5:1 — a typing
+     test whose pending text fails contrast is unusable, not merely subtle. */
+  --type-pending: #8b9db5;
+  --type-done: #e8eef4;
+  --type-error: #ff6b85;
+  --type-caret: #4ff0d0;
+
+  --shadow-lift: 0 1px 0 rgb(255 255 255 / 0.04), 0 8px 24px -12px rgb(0 0 0 / 0.8);
 }
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f4f7fa;
+  --bg-elev: #ffffff;
+  --bg-panel: #ffffff;
+  --bg-inset: #e9eff5;
+  --line: #d7e0ea;
+  --line-strong: #7b8ca3;
+
+  --fg: #0b1220;
+  --fg-muted: #4d6076;
+  --fg-faint: #6b7f96;
+
+  --ion: #0b7565;
+  --plasma: #5b4bd6;
+  --flare: #9c5405;
+  --fault: #c4162f;
+
+  --type-pending: #4d6076;
+  --type-done: #0b1220;
+  --type-error: #c4162f;
+  --type-caret: #0b7565;
+
+  --shadow-lift: 0 1px 0 rgb(255 255 255 / 0.9), 0 8px 24px -14px rgb(11 18 32 / 0.28);
+}
+
+/* "system" is resolved to an explicit data-theme by the no-flash inline
+   script in layout.tsx, before first paint. That is deliberate: declaring the
+   light palette a second time inside a prefers-color-scheme block means two
+   copies of every value, and they drift the first time anyone tunes one.
+   With JavaScript disabled the :root defaults above apply, so the game falls
+   back to dark rather than to something unstyled. */
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-bg-elev: var(--bg-elev);
+  --color-panel: var(--bg-panel);
+  --color-inset: var(--bg-inset);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-faint: var(--fg-faint);
+  --color-ion: var(--ion);
+  --color-plasma: var(--plasma);
+  --color-flare: var(--flare);
+  --color-fault: var(--fault);
+
+  --font-display: var(--font-chakra), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "Cascadia Code", monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ---------------------------------------------------------------- base ---- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-display);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Every readout that updates at 10Hz needs fixed-width digits, or the layout
+   jitters as the numbers change and the whole HUD looks cheap. */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* A mono font with `calt` on fuses `!=` and `->` into single glyphs, which
+   desyncs the caret from the character index in code mode. Non-negotiable. */
+.type-surface {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+  font-kerning: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ion);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--ion) 30%, transparent);
+  color: var(--fg);
+}
+
+/* Reduced motion is split three ways in settings; this handles the ambient
+   case only. Entity motion is never disabled — that would remove the game. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }

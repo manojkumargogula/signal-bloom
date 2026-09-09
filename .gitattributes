@@ -1,0 +1,14 @@
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.webp binary
+*.avif binary
+*.ico binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+
+*.generated.ts linguist-generated=true
+*.generated.json linguist-generated=true
+pnpm-lock.yaml linguist-generated=true
