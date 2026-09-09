@@ -1,4 +1,3 @@
-import { clamp } from "@/lib/math";
 import { makeEffectApi, RelicRuntime } from "./relics/runtime";
 import { liveEntities, refreshStats, spawnTransmission, waveBudget } from "./state";
 import type { EngineContext, EngineEvent, GameState, Transmission } from "./types";
@@ -64,14 +63,12 @@ export function step(
     entity.prevZ = entity.z;
 
     entity.z -= entity.speed * seconds;
-    entity.x += entity.drift * seconds;
 
-    // Bounce off the field edges rather than letting entities wander out of
-    // view, which would make them unreadable but still lethal.
-    if (entity.x > 1 || entity.x < -1) {
-      entity.x = clamp(entity.x, -1, 1);
-      entity.drift *= -1;
-    }
+    // Bearing wraps rather than clamping: the scope is a full circle, so a
+    // contact drifting past the far bearing simply comes round the other side.
+    entity.x += entity.drift * seconds;
+    if (entity.x > 1) entity.x -= 2;
+    else if (entity.x < -1) entity.x += 2;
 
     if (entity.z <= 0) {
       entity.status = "impacted";

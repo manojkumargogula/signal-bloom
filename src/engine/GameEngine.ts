@@ -38,6 +38,14 @@ export interface HudSnapshot {
   readonly charIndex: number;
   /** What the player has actually typed in the current word, for rendering. */
   readonly typedInWord: readonly string[];
+  /**
+   * What was typed in every word so far, indexed by word.
+   *
+   * The surface needs this for the words BEHIND the cursor, not just the
+   * current one: without it every finished word renders as though it had
+   * never been typed, and the player cannot see their own progress.
+   */
+  readonly typedWords: readonly (readonly string[])[];
   readonly timeLeftMs: number | null;
   readonly rev: number;
 }
@@ -160,15 +168,26 @@ export class GameEngine {
   private buildSnapshot(): HudSnapshot {
     const s = this.state;
     const metrics = this.liveMetrics();
-    const target = this.targets[this.recorder.wordIndex] ?? "";
-    const typedInWord: string[] = [];
+    // One pass over the log rebuilds what was typed in every word. At 10Hz
+    // over a few thousand keystrokes this is far cheaper than the alternative
+    // of keeping a parallel mutable copy in sync with the recorder.
+    const typedWords: string[][] = [];
     for (const k of this.recorder.log) {
-      if (k.wordIndex !== this.recorder.wordIndex) continue;
-      if (k.kind === "insert") typedInWord[k.charIndex] = k.actual;
-      else if (k.kind === "backspace") typedInWord.length = Math.max(0, typedInWord.length - 1);
-      else typedInWord.length = 0;
+      let word = typedWords[k.wordIndex];
+      if (!word) {
+        word = [];
+        typedWords[k.wordIndex] = word;
+      }
+      if (k.kind === "insert") {
+        word.length = k.charIndex;
+        word[k.charIndex] = k.actual;
+      } else if (k.kind === "backspace") {
+        word.length = Math.max(0, word.length - 1);
+      } else {
+        word.length = 0;
+      }
     }
-    void target;
+    const typedInWord = typedWords[this.recorder.wordIndex] ?? [];
 
     return {
       phase: s.phase,
@@ -189,6 +208,7 @@ export class GameEngine {
       wordIndex: this.recorder.wordIndex,
       charIndex: this.recorder.charIndex,
       typedInWord,
+      typedWords,
       timeLeftMs: this.timeLeftMs(),
       rev: this.rev,
     };
@@ -204,6 +224,7 @@ export class GameEngine {
   private liveMetrics(): { wpm: number; accuracy: number } {
     const elapsed = this.elapsedMs();
     if (elapsed <= 0) return { wpm: 0, accuracy: 100 };
+    if (this.recorder.log.length === 0) return { wpm: 0, accuracy: 100 };
 
     let correct = 0;
     let firstPresses = 0;
@@ -242,6 +263,11 @@ export class GameEngine {
   }
 
   // ---- lifecycle --------------------------------------------------------
+
+  /** True when the mode should begin without waiting for a keystroke. */
+  get startsImmediately(): boolean {
+    return this.state.mode === "onslaught";
+  }
 
   start(now: number): void {
     if (this.state.phase === "running") return;

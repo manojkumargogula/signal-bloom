@@ -26,9 +26,7 @@ interface Bloom {
 
 export interface NebulaPalette {
   ink: [number, number, number];
-  ion: [number, number, number];
-  plasma: [number, number, number];
-  flare: [number, number, number];
+  amber: [number, number, number];
   lightMode: boolean;
 }
 
@@ -45,7 +43,7 @@ export class NebulaLayer {
   private frame = 0;
   private failed = false;
   private palette: NebulaPalette | null = null;
-  private intensity = 1;
+  private intensity = 0.5;
 
   constructor(private readonly canvas: HTMLCanvasElement) {}
 
@@ -139,7 +137,7 @@ export class NebulaLayer {
 
     for (const name of [
       "uResolution", "uTime", "uIntensity", "uLightMode",
-      "uInk", "uIon", "uPlasma", "uFlare", "uBlooms", "uBloomCount",
+      "uInk", "uAmber", "uBlooms", "uBloomCount",
     ]) {
       this.uniforms[name] = gl.getUniformLocation(program, name);
     }
@@ -194,10 +192,13 @@ export class NebulaLayer {
     const palette = this.palette;
     if (!gl || !this.program || this.failed || this.tier === "off" || !palette) return;
 
-    // Ambient motion at 30Hz. The field drifts slowly enough that nobody can
-    // tell, and it halves the cost of the most expensive layer.
+    // Ambient motion at 30Hz, at every tier including the highest. The scope
+    // drifts slowly enough that nobody can tell it is not running at 60, and
+    // this is a fullscreen fragment shader -- comfortably the most expensive
+    // thing in the renderer. Halving its rate buys back the frame budget for
+    // the parts of the screen the player is actually reading.
     this.frame++;
-    if (this.tier !== "high" && this.frame % 2 === 1) return;
+    if (this.frame % 2 === 1) return;
 
     gl.useProgram(this.program);
 
@@ -221,9 +222,7 @@ export class NebulaLayer {
     gl.uniform1f(this.uniforms.uIntensity, this.intensity);
     gl.uniform1f(this.uniforms.uLightMode, palette.lightMode ? 1 : 0);
     gl.uniform3fv(this.uniforms.uInk, palette.ink);
-    gl.uniform3fv(this.uniforms.uIon, palette.ion);
-    gl.uniform3fv(this.uniforms.uPlasma, palette.plasma);
-    gl.uniform3fv(this.uniforms.uFlare, palette.flare);
+    gl.uniform3fv(this.uniforms.uAmber, palette.amber);
     gl.uniform4fv(this.uniforms.uBlooms, this.bloomData);
     gl.uniform1i(this.uniforms.uBloomCount, count);
 

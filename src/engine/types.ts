@@ -30,7 +30,17 @@ export interface Transmission {
   word: string;
   /** Characters already decoded. */
   typed: number;
-  /** Virtual position. x,y in -1..1; z from 1 at spawn to 0 at impact. */
+  /**
+   * Position on the scope, in virtual units the renderer projects.
+   *
+   *   x  bearing, -1..1, mapped to a full turn
+   *   y  radial jitter, -1..1, so contacts at the same bearing do not overlap
+   *   z  range: 1 at the rim, 0 when it breaches the perimeter
+   *
+   * Contacts close on the centre, which is where the player is. That is the
+   * whole reading of the screen, and it is why nothing here is in pixels: the
+   * renderer owns the projection, so a resize cannot disturb the simulation.
+   */
   x: number;
   y: number;
   z: number;
@@ -74,9 +84,9 @@ export interface Stats {
 }
 
 export const BASE_STATS: Stats = {
-  spawnIntervalMs: 1800,
-  approachSpeed: 0.055,
-  maxLive: 6,
+  spawnIntervalMs: 1150,
+  approachSpeed: 0.048,
+  maxLive: 7,
   comboCap: 50,
   comboDecayMs: 4000,
   maxShields: 3,

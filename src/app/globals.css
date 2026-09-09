@@ -3,78 +3,93 @@
 /* ============================================================================
    Signal Bloom — design tokens.
 
-   Dark is the primary theme. Light ("daylight lab") is a genuine
-   re-derivation rather than an inversion: the ion/plasma/flare hues are
-   darkened until they hold 4.5:1 on paper, because a neon cyan that sings on
-   #060B14 is illegible on white. Every pair below is checked by
-   `scripts/check-contrast.mjs`, which runs in CI.
+   Amber CRT. The interface is meant to read as equipment rather than as a web
+   app: a phosphor screen, one accent colour, and no decoration that a real
+   instrument would not have.
 
-   Themes swap token VALUES only. No component ever branches on the theme.
+   The discipline is deliberate. There is ONE accent — amber — and it is used
+   for everything the player acts on or reads a value from. Red appears only
+   for a genuine error. Nothing else is coloured. A second accent hue would
+   make the amber mean less, and the amber is the whole identity.
+
+   Every text pair below is checked against WCAG 2.1 by
+   `scripts/check-contrast.mjs`, which parses this file so the check cannot
+   drift from what actually ships.
    ============================================================================ */
 
 :root {
   color-scheme: dark;
 
-  --bg: #060b14;
-  --bg-elev: #0b1220;
-  --bg-panel: #101b2c;
-  --bg-inset: #04080f;
-  --line: #1b2a40;
-  --line-strong: #52698c;
+  --bg: #0a0a0b;
+  --bg-elev: #101013;
+  --bg-panel: #16161a;
+  --bg-inset: #050506;
+  --line: #24242a;
+  --line-strong: #5f5f6a;
 
-  --fg: #e8eef4;
-  --fg-muted: #8b9db5;
-  --fg-faint: #55677e;
+  --fg: #e8e4dc;
+  --fg-muted: #a09a8d;
+  --fg-faint: #6f6a60;
 
-  --ion: #4ff0d0;
-  --plasma: #9b8cff;
-  --flare: #ffb347;
-  --fault: #ff6b85;
+  /* The one accent. */
+  --amber: #ffb627;
+  --amber-dim: #d9992a;
+  /* Errors, and nothing else. */
+  --fault: #ff6b5a;
 
-  /* The two most important colors in the product: upcoming text at low
-     emphasis, decoded text at full emphasis. Both must pass 4.5:1 — a typing
-     test whose pending text fails contrast is unusable, not merely subtle. */
-  --type-pending: #8b9db5;
-  --type-done: #e8eef4;
-  --type-error: #ff6b85;
-  --type-caret: #4ff0d0;
+  --type-pending: #a09a8d;
+  --type-done: #e8e4dc;
+  --type-error: #ff6b5a;
+  --type-caret: #ffb627;
 
-  --shadow-lift: 0 1px 0 rgb(255 255 255 / 0.04), 0 8px 24px -12px rgb(0 0 0 / 0.8);
+  /* Chart series. One hue plus a neutral, distinguished by line style and
+     direct labels rather than by a second colour — see WpmChart. */
+  --series-net: #ffb627;
+  --series-raw: #9c968a;
+  --series-grid: #24242a;
+
+  --phosphor: 1;
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --bg: #f4f7fa;
+  --bg: #f5f2ec;
   --bg-elev: #ffffff;
   --bg-panel: #ffffff;
-  --bg-inset: #e9eff5;
-  --line: #d7e0ea;
-  --line-strong: #7b8ca3;
+  --bg-inset: #eae6dd;
+  --line: #ddd7cb;
+  --line-strong: #8d8779;
 
-  --fg: #0b1220;
-  --fg-muted: #4d6076;
-  --fg-faint: #6b7f96;
+  --fg: #1a1a1c;
+  --fg-muted: #5c574c;
+  --fg-faint: #797366;
 
-  --ion: #0b7565;
-  --plasma: #5b4bd6;
-  --flare: #9c5405;
-  --fault: #c4162f;
+  /* Amber cannot survive on paper: #FFB627 is 1.5:1 on off-white. The light
+     theme uses a deep burnt amber instead, which holds the identity while
+     staying legible. This is a re-derivation, not an inversion. */
+  --amber: #8a5200;
+  --amber-dim: #7a4800;
+  --fault: #c2160b;
 
-  --type-pending: #4d6076;
-  --type-done: #0b1220;
-  --type-error: #c4162f;
-  --type-caret: #0b7565;
+  --type-pending: #5c574c;
+  --type-done: #1a1a1c;
+  --type-error: #c2160b;
+  --type-caret: #8a5200;
 
-  --shadow-lift: 0 1px 0 rgb(255 255 255 / 0.9), 0 8px 24px -14px rgb(11 18 32 / 0.28);
+  --series-net: #8a5200;
+  --series-raw: #6f6a5e;
+  --series-grid: #ddd7cb;
+
+  --phosphor: 0;
 }
 
-/* "system" is resolved to an explicit data-theme by the no-flash inline
-   script in layout.tsx, before first paint. That is deliberate: declaring the
-   light palette a second time inside a prefers-color-scheme block means two
-   copies of every value, and they drift the first time anyone tunes one.
-   With JavaScript disabled the :root defaults above apply, so the game falls
-   back to dark rather than to something unstyled. */
+/* "system" is resolved to an explicit data-theme by the inline script in
+   layout.tsx, before first paint. Declaring the light palette a second time
+   inside a prefers-color-scheme block would mean two copies of every value,
+   and they drift the first time anyone tunes one. With JavaScript disabled
+   the :root defaults above apply, so the game falls back to dark rather than
+   to something unstyled. */
 
 @theme inline {
   --color-bg: var(--bg);
@@ -86,9 +101,7 @@
   --color-fg: var(--fg);
   --color-fg-muted: var(--fg-muted);
   --color-fg-faint: var(--fg-faint);
-  --color-ion: var(--ion);
-  --color-plasma: var(--plasma);
-  --color-flare: var(--flare);
+  --color-amber: var(--amber);
   --color-fault: var(--fault);
 
   --font-display: var(--font-chakra), ui-sans-serif, system-ui, sans-serif;
@@ -107,6 +120,15 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+html,
+body {
+  /* Single screen. The game is the page, so nothing scrolls at the document
+     level; anything that needs to scroll does it inside its own panel. */
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -114,6 +136,13 @@ body {
   font-family: var(--font-display);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Content pages are ordinary documents and do scroll. */
+body[data-scroll="true"],
+html:has(body[data-scroll="true"]) {
+  height: auto;
+  overflow: auto;
 }
 
 /* Every readout that updates at 10Hz needs fixed-width digits, or the layout
@@ -133,19 +162,25 @@ body {
   font-kerning: none;
 }
 
+.label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
+
 :focus-visible {
-  outline: 2px solid var(--ion);
+  outline: 2px solid var(--amber);
   outline-offset: 2px;
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
 ::selection {
-  background: color-mix(in oklab, var(--ion) 30%, transparent);
+  background: color-mix(in oklab, var(--amber) 32%, transparent);
   color: var(--fg);
 }
 
-/* Reduced motion is split three ways in settings; this handles the ambient
-   case only. Entity motion is never disabled — that would remove the game. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -166,4 +201,143 @@ body {
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
+}
+
+/* ------------------------------------------------------ transmissions ---- */
+
+/*
+ * Depth is conveyed by these eight font-size rungs, not by a CSS scale.
+ * Scaling a promoted compositor layer stretches its cached bitmap and the
+ * text goes soft, which would defeat the whole reason for rendering the
+ * field as DOM instead of canvas. See src/render/stage.ts.
+ */
+.transmission {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform, opacity;
+  transform: translate3d(-9999px, 0, 0);
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  contain: layout style paint;
+  translate: -50% -50%;
+  color: var(--fg);
+  /* A dark halo, so the word stays legible over any part of the field. A
+     text-shadow rather than a filter or backdrop-filter: both of those force
+     the layer to repaint every frame. */
+  text-shadow:
+    0 0 1px var(--bg),
+    0 0 10px color-mix(in oklab, var(--bg) 90%, transparent),
+    0 1px 18px color-mix(in oklab, var(--bg) 75%, transparent);
+}
+
+.transmission[data-rung="0"] { font-size: 0.95rem; }
+.transmission[data-rung="1"] { font-size: 1.08rem; }
+.transmission[data-rung="2"] { font-size: 1.22rem; }
+.transmission[data-rung="3"] { font-size: 1.38rem; }
+.transmission[data-rung="4"] { font-size: 1.56rem; }
+.transmission[data-rung="5"] { font-size: 1.76rem; }
+.transmission[data-rung="6"] { font-size: 2.0rem; }
+.transmission[data-rung="7"] { font-size: 2.28rem; }
+
+.transmission-done {
+  color: var(--amber);
+}
+
+.transmission-rest {
+  color: var(--fg);
+}
+
+/* Unlocked transmissions recede so the locked one reads as the target. Still
+   above 4.5:1 — this is emphasis, not dimming into illegibility, which is the
+   usual mistake on typing sites. */
+.transmission[data-active="false"] .transmission-rest {
+  color: var(--type-pending);
+}
+
+/* The locked target has to be unmistakable at a glance: the player needs to
+   know where their keystrokes are going without hunting for it. */
+.transmission[data-active="true"] {
+  z-index: 2;
+}
+
+.transmission[data-active="true"]::before {
+  content: "";
+  position: absolute;
+  inset: -0.4em -0.7em;
+  border: 1px solid var(--amber);
+  background: color-mix(in oklab, var(--bg) 86%, transparent);
+  z-index: -1;
+}
+
+/* A carrier is the wave's pressure spike and has to read as one instantly. */
+.transmission[data-kind="carrier"] {
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.transmission[data-kind="carrier"] .transmission-rest {
+  color: var(--amber);
+}
+
+/* ------------------------------------------------------------- caret ---- */
+
+.caret {
+  animation: caret-pulse 1.05s steps(2, jump-none) infinite;
+}
+
+@keyframes caret-pulse {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0.18; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caret { animation: none; }
+}
+
+/* --------------------------------------------------------- the screen ---- */
+
+/*
+ * What the shader degrades to, and what renders before WebGL initialises.
+ * A CSS gradient is deliberately not an LCP candidate, so the heading wins
+ * largest-contentful-paint instead of the canvas.
+ */
+.phosphor-fallback {
+  background:
+    radial-gradient(130% 90% at 50% 8%, color-mix(in oklab, var(--amber) 7%, transparent), transparent 62%),
+    var(--bg);
+}
+
+/* Scanlines. Two pixels on, two off, at very low contrast — enough to read as
+   a phosphor screen, not enough to interfere with the text. Drawn in CSS
+   rather than the shader so it stays crisp at device resolution regardless of
+   the render scale the shader is running at. */
+.scanlines::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--bg) 55%, transparent) 0 1px,
+    transparent 1px 3px
+  );
+  opacity: calc(var(--phosphor) * 0.5);
+  mix-blend-mode: multiply;
+}
+
+/* The vignette that makes it a screen rather than a page. */
+.vignette::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    120% 100% at 50% 50%,
+    transparent 42%,
+    color-mix(in oklab, var(--bg) 78%, transparent) 100%
+  );
 }

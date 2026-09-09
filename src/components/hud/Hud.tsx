@@ -1,0 +1,102 @@
+"use client";
+
+import { memo } from "react";
+import type { HudSnapshot } from "@/engine/GameEngine";
+
+/**
+ * The readout strip.
+ *
+ * One subscription at this level with memoised children taking primitive
+ * props, so a 10Hz publish diffs a handful of tiny components rather than the
+ * whole tree. Nothing here animates: smooth motion is written straight to CSS
+ * custom properties by the render loop and never routed through React.
+ *
+ * Laid out as instrument channels — a label above a value, in a fixed-width
+ * mono face so nothing shifts as the digits change.
+ */
+
+const Channel = memo(function Channel({
+  label,
+  value,
+  accent,
+  size = "md",
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+  size?: "md" | "lg";
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="label">{label}</span>
+      <span
+        className={[
+          "num font-semibold leading-none",
+          size === "lg" ? "text-[1.6rem]" : "text-[1.15rem]",
+          accent ? "text-[var(--amber)]" : "text-[var(--fg)]",
+        ].join(" ")}
+      >
+        {value}
+      </span>
+    </div>
+  );
+});
+
+const Shields = memo(function Shields({ shields, max }: { shields: number; max: number }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="label">Shields</span>
+      <div
+        className="flex items-center gap-[3px] pt-[3px]"
+        role="img"
+        aria-label={`${shields} of ${max} shields remaining`}
+      >
+        {Array.from({ length: max }, (_, i) => (
+          <span
+            key={i}
+            className={
+              i < shields
+                ? "h-3.5 w-2 bg-[var(--amber)]"
+                : "h-3.5 w-2 border border-[var(--line-strong)]"
+            }
+          />
+        ))}
+      </div>
+    </div>
+  );
+});
+
+export const Hud = memo(function Hud({ snapshot }: { snapshot: HudSnapshot }) {
+  const isOnslaught = snapshot.mode === "onslaught";
+  const seconds = snapshot.timeLeftMs === null ? null : Math.ceil(snapshot.timeLeftMs / 1000);
+
+  return (
+    <div className="flex w-full items-start justify-between gap-8">
+      <div className="flex items-start gap-8">
+        {isOnslaught ? (
+          <>
+            <Channel label="Wave" value={String(snapshot.wave)} size="lg" accent />
+            <Channel label="Score" value={snapshot.score.toLocaleString()} size="lg" />
+            <Channel
+              label="Combo"
+              value={snapshot.combo > 0 ? `${snapshot.combo}×` : "—"}
+            />
+          </>
+        ) : (
+          <>
+            {seconds !== null && (
+              <Channel label="Time" value={`${seconds}`} size="lg" accent />
+            )}
+            <Channel label="Words" value={String(snapshot.decoded)} size="lg" />
+          </>
+        )}
+      </div>
+
+      <div className="flex items-start gap-8">
+        <Channel label="WPM" value={String(Math.round(snapshot.wpm))} size="lg" accent />
+        <Channel label="Accuracy" value={`${snapshot.accuracy.toFixed(1)}%`} />
+        {isOnslaught && <Shields shields={snapshot.shields} max={snapshot.maxShields} />}
+      </div>
+    </div>
+  );
+});

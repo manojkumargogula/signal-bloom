@@ -89,9 +89,17 @@ export function attachInputRouter(options: RouterOptions): () => void {
         // dead keys and unavailable on Android.
         pendingCode = event.code || null;
         pendingAt = t;
-        if (intent.preventDefault && event.key === " ") {
-          // Space would scroll the page. The character still arrives through
-          // beforeinput, so preventing the default costs nothing.
+
+        // Do NOT preventDefault here while the capture input has focus.
+        // Cancelling a keydown cancels the browser's text insertion, so
+        // beforeinput never fires and the character is silently lost. That is
+        // exactly what happened to every space: the scroll guard swallowed
+        // the most common character in the language.
+        //
+        // A focused text input already absorbs space without scrolling the
+        // page, so the guard is only needed when focus has escaped -- and in
+        // that case there is no beforeinput to lose.
+        if (intent.preventDefault && event.target !== input) {
           event.preventDefault();
         }
         return;

@@ -36,7 +36,9 @@ export function createState(config: RunConfig): GameState {
     relics: [],
     draft: null,
     nextEntityId: 1,
-    spawnTimer: 0,
+    // Pre-armed, so the first transmission arrives immediately rather than
+    // after a full interval of empty sky -- which reads as broken, not calm.
+    spawnTimer: BASE_STATS.spawnIntervalMs,
     spawnBudget: waveBudget(1),
   };
 }
@@ -123,11 +125,11 @@ export function spawnTransmission(
         )
       : ctx.drawWord(state.stats.lengthBias);
 
-  // Keep spawns away from the exact centre column, where the typing surface
-  // sits, and spread them over the upper field.
-  const side = ctx.rngSpawn.next() < 0.5 ? -1 : 1;
-  const x = side * ctx.rngSpawn.range(0.12, 0.92);
-  const y = ctx.rngSpawn.range(-0.85, 0.35);
+  // Contacts appear anywhere on the rim, on any bearing, with a little
+  // radial jitter so two arriving on the same bearing do not sit on top of
+  // one another.
+  const x = ctx.rngSpawn.range(-1, 1);
+  const y = ctx.rngSpawn.range(-1, 1);
 
   const entity = {
     id: state.nextEntityId++,
@@ -143,7 +145,9 @@ export function spawnTransmission(
       state.stats.approachSpeed *
       ctx.rngSpawn.range(0.85, 1.15) *
       (kind === "carrier" ? 0.66 : 1),
-    drift: ctx.rngSpawn.range(-0.05, 0.05),
+    // A slow bearing drift, so contacts curve in rather than tracking dead
+    // straight -- straight lines read as a screensaver.
+    drift: ctx.rngSpawn.range(-0.035, 0.035),
     kind,
     status: "alive" as const,
     spawnedAt: state.simTime,

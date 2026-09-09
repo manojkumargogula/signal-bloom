@@ -31,6 +31,10 @@ export const REPO_URL = "https://github.com/manojkumargogula/signal-bloom";
 
 export const SITE = {
   name: "Signal Bloom",
+  /** The origin plus base path -- where the site actually lives. */
+  url: SITE_URL,
+  /** The origin alone, for metadataBase. */
+  origin: ORIGIN,
   author: "Manoj Kumar Gogula",
   github: REPO_URL,
   /**

@@ -43,16 +43,20 @@ const PAIRS = [
   ["fg-muted", "bg-elev", 4.5, "secondary text, raised"],
   ["fg-muted", "bg-panel", 4.5, "secondary text, panels"],
   ["fg-faint", "bg", 3.0, "decorative rules and labels only"],
-  ["ion", "bg", 4.5, "primary accent as text"],
-  ["ion", "bg-panel", 3.0, "accent borders and controls"],
-  ["plasma", "bg", 4.5, "secondary accent as text"],
-  ["flare", "bg", 4.5, "warning text"],
+  ["amber", "bg", 4.5, "the accent, as text"],
+  ["amber", "bg-panel", 4.5, "accent text in panels"],
+  ["amber", "bg-inset", 4.5, "accent text on inset surfaces"],
+  ["amber-dim", "bg", 4.5, "de-emphasised accent text"],
   ["fault", "bg", 4.5, "error text"],
   ["fault", "bg-panel", 4.5, "error text in panels"],
   ["type-pending", "bg", 4.5, "upcoming text in the typing surface"],
   ["type-done", "bg", 4.5, "decoded text in the typing surface"],
   ["type-error", "bg", 4.5, "mistyped text"],
   ["line-strong", "bg", 3.0, "visible borders"],
+  // Chart marks need 3:1 against the surface they are drawn on, not 4.5:1 --
+  // they are graphics, not text, and each is also directly labelled.
+  ["series-net", "bg-panel", 3.0, "net WPM series mark"],
+  ["series-raw", "bg-panel", 3.0, "raw WPM series mark"],
 ];
 
 const THEMES = [

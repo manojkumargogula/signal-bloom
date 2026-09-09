@@ -174,6 +174,36 @@ describe("input router", () => {
     s.detach();
   });
 
+  it("does not cancel the space keydown while the input has focus", () => {
+    // Regression: preventDefault on a keydown cancels the browser's text
+    // insertion, so beforeinput never fires. Guarding space against page
+    // scroll this way silently swallowed every space in the run -- the most
+    // common character there is.
+    const s = setup();
+    const event = new KeyboardEvent("keydown", {
+      key: " ",
+      code: "Space",
+      bubbles: true,
+      cancelable: true,
+    });
+    s.input.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+
+    // And the space still arrives as a character.
+    s.beforeinput("insertText", " ");
+    expect((s.handlers.onChar as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe(" ");
+    s.detach();
+  });
+
+  it("still blocks page scroll when focus has escaped the input", () => {
+    // With focus elsewhere there is no beforeinput to lose, so the scroll
+    // guard is safe and worth keeping.
+    const s = setup();
+    const event = s.keydown({ key: " ", code: "Space" });
+    expect(event.defaultPrevented).toBe(true);
+    s.detach();
+  });
+
   it("never prevents Tab", () => {
     const s = setup();
     const event = s.keydown({ key: "Tab", code: "Tab" });
