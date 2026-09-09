@@ -21,7 +21,7 @@ import type { RunResult } from "@/engine/GameEngine";
 const PREFIX = "signalbloom:v1";
 const HISTORY_KEY = `${PREFIX}:history`;
 const BESTS_KEY = `${PREFIX}:bests`;
-const SCHEMA = 1;
+const SCHEMA = 2;
 
 /** History entries drop the keystroke log: it is large and rarely re-read. */
 export type HistoryEntry = Omit<RunResult, "metrics"> & {
@@ -58,10 +58,51 @@ function write(key: string, value: unknown): boolean {
   }
 }
 
+/**
+ * Modes that no longer exist.
+ *
+ * An Ascent score is height and an Onslaught score was waves cleared, so
+ * carrying them into one trend line would put two incomparable numbers side
+ * by side. They are dropped rather than relabelled.
+ */
+const RETIRED_MODES = new Set(["onslaught"]);
+
+/**
+ * Reads the history, migrating an older file in place.
+ *
+ * The version bump could NOT be a bare bump. `loadHistory` returns nothing on
+ * a schema mismatch, so raising SCHEMA from 1 to 2 on its own would have
+ * silently destroyed Sprint and Zen history along with the Onslaught runs --
+ * and Sprint and Zen are the modes that set records, so that is the history
+ * that actually matters. Hence a real migration.
+ */
 export function loadHistory(): HistoryEntry[] {
   const file = read<HistoryFile>(HISTORY_KEY, { schema: SCHEMA, runs: [] });
-  if (file.schema !== SCHEMA || !Array.isArray(file.runs)) return [];
-  return file.runs;
+  if (!Array.isArray(file.runs)) return [];
+
+  if (file.schema === SCHEMA) return file.runs;
+
+  if (file.schema === 1) {
+    const kept = file.runs.filter((run) => !RETIRED_MODES.has(run.mode));
+    write(HISTORY_KEY, { schema: SCHEMA, runs: kept });
+
+    // The bests map is keyed by mode, so it needs the same treatment or a
+    // retired mode keeps a record nothing can ever match.
+    const bests = read<Bests>(BESTS_KEY, {});
+    const keptBests = Object.fromEntries(
+      Object.entries(bests).filter(([key]) => !RETIRED_MODES.has(key.split(":")[0])),
+    );
+    if (Object.keys(keptBests).length !== Object.keys(bests).length) {
+      write(BESTS_KEY, keptBests);
+    }
+
+    bestsCache = null;
+    return kept;
+  }
+
+  // A version from the future, or something unrecognisable. Better to show an
+  // empty history than to guess at a shape.
+  return [];
 }
 
 export function saveRun(result: RunResult): void {

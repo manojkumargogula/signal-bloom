@@ -15,39 +15,44 @@ const page = await browser.newPage({
 });
 
 await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+await page.waitForTimeout(1600);
 
-// Let a wave build, then play into it so the shot shows a real board with a
-// locked target and a live combo rather than an empty field.
-await page.waitForTimeout(5500);
+// Climb a few platforms so the shot shows a real board -- a combo running,
+// the flood risen, and a word part-typed -- rather than the opening state.
 
-const live = () =>
-  page.evaluate(() =>
-    Array.from(document.querySelectorAll(".transmission"))
-      .filter((n) => n.style.opacity !== "0" && !n.style.transform.includes("-9999"))
-      .map((n) => n.textContent ?? ""),
+const activeWord = () =>
+  page.evaluate(
+    () =>
+      document.querySelector('.platform[data-rank="0"] .platform-word')?.textContent ?? null,
+  );
+const typedCount = () =>
+  page.evaluate(
+    () => document.querySelectorAll('.platform[data-rank="0"] [data-state="done"]').length,
   );
 
-for (let round = 0; round < 3; round++) {
-  const words = await live();
-  if (words.length === 0) break;
-  for (const ch of words[0]) {
+for (let i = 0; i < 7; i++) {
+  const word = await activeWord();
+  if (!word) break;
+  for (const ch of word) {
     await page.keyboard.type(ch);
     await page.waitForTimeout(55);
   }
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(120);
 }
 
-// Stop partway through the next word, so the lock indicator is visible.
-const words = await live();
-if (words.length > 0) {
-  for (const ch of words[0].slice(0, Math.max(1, words[0].length - 2))) {
+// Stop partway through the next word, so the shot shows the crouch loaded and
+// the typed prefix lit.
+const partial = await activeWord();
+if (partial && partial.length > 2) {
+  for (const ch of partial.slice(0, partial.length - 1)) {
     await page.keyboard.type(ch);
     await page.waitForTimeout(60);
   }
 }
-await page.waitForTimeout(250);
-await page.screenshot({ path: "docs/onslaught.png" });
-console.log("docs/onslaught.png");
+await page.waitForTimeout(200);
+void typedCount;
+await page.screenshot({ path: "docs/ascent.png" });
+console.log("docs/ascent.png");
 
 // Sprint, mid-run and then complete.
 await page.getByRole("button", { name: "Sprint", exact: true }).click();

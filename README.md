@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/onslaught.png" width="820" alt="An Onslaught wave in progress: words closing on a radar scope, one locked target with its decoded prefix in amber, and a live readout of wave, score, combo, speed and accuracy.">
+<img src="docs/ascent.png" width="820" alt="A climb in progress: a climber standing on a ledge below a ringed platform carrying the word being typed, two more words above it, and a flood risen across the lower third of the screen.">
 
 # Signal Bloom
 
@@ -24,11 +24,12 @@ account and no server: every run stays in your browser.
 
 ## Three ways to play
 
-**Onslaught** — the game. Words arrive as transmissions closing on your
-position from the rim of a radar scope. Your first keystroke locks the nearest
-one; decode it before it breaches the perimeter. Clear a wave and you salvage
-one of three relics that change the rules for the rest of the run. There are
-14 of them and they stack, so the point of a run is the build you end up with.
+**Ascent** — the game. A technician stands on a ledge; the platform above
+carries a word. Type it and they leap up to it, and every letter you get right
+visibly loads the jump. A flood rises from below and speeds up with every
+platform you clear, so it is the only thing that can end a run. Every twelve
+platforms the world changes colour and you salvage one of fourteen relics that
+change the rules for the rest of the climb.
 
 **Sprint** — the honest typing test. 15, 30, 60 or 120 seconds over common
 words, advanced vocabulary, code symbols, numbers or public-domain quotes.
@@ -68,7 +69,7 @@ pnpm dev
 to provision.** It is a static site with a game in it.
 
 ```bash
-pnpm test         # Vitest — 181 tests across the engine and the metrics math
+pnpm test         # Vitest — 207 tests across the engine and the metrics math
 pnpm typecheck
 pnpm lint
 pnpm contrast     # WCAG gate over the design tokens
@@ -81,11 +82,12 @@ Next.js static export, React 19, Tailwind v4, TypeScript, Vitest. Deployed to
 GitHub Pages. No backend, by design.
 
 ```
-src/engine/     the game: state, simulation, targeting, relics.
-                No React, no DOM, no window — runs in plain Node under test.
+src/engine/     the game: state, the climb, relics.
+                No React, no DOM, no window — runs in plain Node under test,
+                and an ESLint rule enforces the boundary.
 src/analytics/  pure metric math. The most heavily tested code here.
 src/input/      keyboard capture, on two channels.
-src/render/     imperative view layers: WebGL scope, DOM stage, particles.
+src/render/     imperative view layers: platform stage, climber, particles.
 src/react/      the bindings between the engine and React.
 src/data/       word lists and keyboard layouts.
 src/storage/    localStorage schema.
@@ -120,9 +122,16 @@ and playing.
 **The typing surface is real DOM, not canvas.** Canvas text discards the
 accessibility tree, browser zoom, text selection and find-in-page, and renders
 softer at exactly the small sizes that matter. In a game whose whole subject is
-reading letterforms, that trade is not available. Depth on the scope comes from
-eight quantised font-size rungs rather than a CSS scale, because scaling a
-promoted compositor layer stretches its cached bitmap and the text goes blurry.
+reading letterforms, that trade is not available.
+
+**The motion budget is the design.** The camera anchors the active platform at
+a fixed height, only ever moves upward, and nothing else is permitted to touch
+it — no landing shake, no error shake, no tracking of the leap. It is also
+completely still while you are typing, easing only during the jump, so
+scrolling is *interleaved* with reading rather than simultaneous. Only the
+active platform animates. A wrong letter turns one letter cell red; the glyph
+never moves, because displacement destroys legibility at exactly the moment you
+need to read the letter you just got wrong.
 
 More in [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -170,21 +179,24 @@ Stated plainly, since some of them are architectural:
 - **History does not sync.** It is in `localStorage` on the device you played
   on, and clearing site data erases it. That is the cost of having no server.
   It holds your last 500 runs and shows a trend across them.
-- **Onslaught does not feed your long-term statistics.** You choose which word
-  to answer there, so the expected character is ambiguous and statistics built
-  on it would be quietly wrong. Sprint sets your records.
+- **The generated skies are not in this build yet.** Each band renders its
+  colour gradient instead, which is also what reduced motion and a failed
+  image load get. The `gemini` CLI needs authenticating before the painterly
+  backdrops can be produced.
 - **Shared links cannot show your exact numbers.** GitHub Pages has no runtime,
   so a social preview image cannot be generated per result. You can copy your
   result card as an image instead.
 - **The heatmap assumes QWERTY fingering.** Physical key codes are recorded for
   every keystroke, so adding a layout is a finger map rather than a rewrite.
 - **Mobile is supported, not designed for.** Sprint and Zen work on a touch
-  keyboard. Onslaught expects two hands on real keys.
+  keyboard. Ascent expects two hands on real keys.
 
 ## Roadmap
 
 - [x] Offline play, verified by cutting the network and playing
 - [x] Run history with a trend line
+- [ ] The five generated band skies
+- [ ] Word choice biased toward your own problem bigrams
 - [ ] Dvorak and Colemak finger maps
 - [ ] Career per-key statistics accumulated across runs
 - [ ] More word lists, in more languages

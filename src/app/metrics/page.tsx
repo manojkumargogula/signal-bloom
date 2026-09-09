@@ -183,17 +183,19 @@ consistency = 100 × (1 − tanh(cv + cv³/3 + cv⁵/5))`}</Formula>
 
         <Answer id="which-mode" question="Which mode should I trust for a real score?">
           <p>
-            Sprint. It is a conventional timed typing test over a fixed body of text, so
-            every keystroke has one unambiguous expected character and the resulting
-            figures are comparable with any other typing test.
+            Both Sprint and Ascent report figures you can rely on, and both feed your
+            personal bests. Each presents one word at a time, so the character the game
+            expected from you is never ambiguous and every keystroke can be judged.
           </p>
           <p>
-            Onslaught reports the same figures for the run you just played, but they do not
-            feed your personal bests or long-term key statistics. In Onslaught you choose
-            which word to answer, so what counts as the expected character depends on which
-            transmission you locked — and statistics built on that would be quietly wrong.
+            Sprint is the one to use if you want a number comparable with other typing
+            tests: it is a conventional timed test over a fixed body of text, with nothing
+            chasing you. Ascent measures the same things, but under pressure from a rising
+            flood — which is a real measurement of how you type when it matters, and not
+            the same measurement as a calm one.
           </p>
         </Answer>
+
       </DocPage>
     </>
   );

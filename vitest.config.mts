@@ -14,7 +14,7 @@ export default defineConfig({
         test: {
           name: "engine",
           environment: "node",
-          include: ["src/{engine,analytics,storage,lib,data}/**/*.test.ts"],
+          include: ["src/{engine,analytics,lib,data}/**/*.test.ts"],
         },
       },
       {
@@ -23,7 +23,9 @@ export default defineConfig({
         test: {
           name: "dom",
           environment: "happy-dom",
-          include: ["src/{input,render,react,ui}/**/*.test.{ts,tsx}"],
+          // storage/ lives here rather than in the node project because
+          // localStorage needs a DOM.
+          include: ["src/{input,render,react,ui,storage}/**/*.test.{ts,tsx}"],
         },
       },
     ],

@@ -277,15 +277,32 @@ describe("the flood", () => {
     expect(state.drowned).toBe(true);
   });
 
-  it("slows on a perfect word but never reverses", () => {
-    // Reverse motion in the periphery under an upward camera is the exact
-    // readability failure this design avoids, so relief is a rate change.
+  it("slows on a perfect word, and the flood itself never runs backwards", () => {
+    // Two different things, and an earlier version of this test confused
+    // them. Climbing DOES increase the gap -- that is the reward, and the
+    // race the mode is built on. What must never happen is the flood's own
+    // position moving backwards, because reverse motion in the periphery
+    // under an upward-scrolling camera is the readability failure the whole
+    // layout avoids. So relief is a rate change, and only a relic may break
+    // that rule.
     const { state, ctx } = start(["ab"]);
-    const before = state.gap;
     climb(state, ctx, 0);
     expect(state.dipMs).toBeGreaterThan(0);
-    // The gap never jumped upward on its own.
-    expect(state.gap).toBeLessThanOrEqual(before);
+
+    // stepAscent alone -- no climbing -- must only ever close the gap.
+    let previous = state.gap;
+    for (let i = 0; i < 240; i++) {
+      stepAscent(state, DT);
+      expect(state.gap).toBeLessThanOrEqual(previous);
+      previous = state.gap;
+    }
+  });
+
+  it("gains a platform of clearance for a platform climbed", () => {
+    const { state, ctx } = start(["ab"]);
+    state.gap = 0.5;
+    climb(state, ctx, 0);
+    expect(state.gap).toBeGreaterThan(1.4);
   });
 
   it("caps the banked gap at the visible maximum", () => {
@@ -493,5 +510,94 @@ describe("invariants", () => {
         if (state.drowned) break;
       }
     }
+  });
+});
+
+describe("flood tuning against real player speeds", () => {
+  /**
+   * Simulates a typist of a given speed against the real flood.
+   *
+   * This is the honest way to check the tuning. Reading it off a screenshot
+   * does not work: a browser harness types with round-trip latency on every
+   * keystroke, so its wall clock is far worse than its reported speed and the
+   * flood looks far more aggressive than it actually is.
+   */
+  function simulate(wpm: number, errorEvery: number) {
+    const state = fresh();
+    const words = ["four", "some", "signal", "trip", "at", "the", "process", "range"];
+    const ctx = ctxWith(words, `sim-${wpm}`);
+    refill(state, ctx);
+
+    const charsPerSecond = (wpm * 5) / 60;
+    const gap = 1000 / charsPerSecond;
+    let t = 0;
+    let keystrokes = 0;
+
+    while (!state.drowned && state.height < 400) {
+      const platform = active(state);
+      if (!platform) break;
+      const expected = platform.word[platform.typed];
+      if (!expected) break;
+
+      const steps = Math.max(1, Math.round(gap / DT));
+      for (let i = 0; i < steps && !state.drowned; i++) stepAscent(state, DT);
+      t += steps * DT;
+      if (state.drowned) break;
+
+      keystrokes++;
+      // A deterministic error pattern, so the result is reproducible rather
+      // than sampled from a generator.
+      const wrong = errorEvery > 0 && keystrokes % errorEvery === 0;
+      const outcome = applyChar(state, ctx, wrong ? "\u0000" : expected, t);
+      if (outcome.kind === "cleared") clearPlatform(state, ctx, outcome.perfect);
+    }
+
+    return { height: state.height, seconds: t / 1000 };
+  }
+
+  it("reports where each skill level actually tops out", () => {
+    // Not an assertion so much as a record: these are the numbers the
+    // acceleration rate was chosen to produce, and seeing them move is the
+    // point of having the simulation at all.
+    const slow = simulate(40, 12);
+    const mid = simulate(80, 18);
+    const fast = simulate(120, 25);
+    console.log(
+      `    40 WPM -> ${slow.height} platforms in ${slow.seconds.toFixed(0)}s\n` +
+        `    80 WPM -> ${mid.height} platforms in ${mid.seconds.toFixed(0)}s\n` +
+        `   120 WPM -> ${fast.height} platforms in ${fast.seconds.toFixed(0)}s`,
+    );
+    expect(slow.height).toBeLessThan(mid.height);
+    expect(mid.height).toBeLessThan(fast.height);
+  });
+
+  it("lets a 40 WPM beginner clear the first band comfortably", () => {
+    // The opening has to be survivable, or nobody gets to see the game.
+    expect(simulate(40, 12).height).toBeGreaterThan(PLATFORMS_PER_BAND);
+  });
+
+  it("takes a fast typist far higher than a slow one", () => {
+    const slow = simulate(40, 12);
+    const fast = simulate(120, 25);
+    expect(fast.height).toBeGreaterThan(slow.height * 1.4);
+  });
+
+  it("still puts a ceiling on a 120 WPM typist", () => {
+    // The acceleration is per platform, so even a very fast typist runs out
+    // of room. Without a ceiling a run never ends and the score means nothing.
+    const run = simulate(120, 25);
+    expect(run.height).toBeLessThan(400);
+    expect(run.height).toBeGreaterThan(PLATFORMS_PER_BAND * 2);
+  });
+
+  it("keeps run length roughly comparable across skill levels", () => {
+    // The property the acceleration rate was chosen for: everyone gets a run
+    // of broadly similar length and height is what differs, so the pacing of
+    // a session stays stable across the whole player base.
+    const slow = simulate(40, 12);
+    const fast = simulate(120, 25);
+    const ratio = fast.seconds / slow.seconds;
+    expect(ratio).toBeGreaterThan(0.4);
+    expect(ratio).toBeLessThan(4);
   });
 });

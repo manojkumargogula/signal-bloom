@@ -56,7 +56,7 @@ export function gameGraph() {
         // An extractable capability list is one of the few pieces of
         // structured data an answer engine can quote directly.
         featureList: [
-          "Wave-based typing roguelite with between-wave upgrades (Onslaught)",
+          "Vertical typing platformer with a rising flood and roguelite upgrades (Ascent)",
           "Timed typing test at 15, 30, 60 or 120 seconds (Sprint)",
           "Untimed practice with no fail state (Zen)",
           "Net WPM, raw WPM, accuracy and consistency for every run",

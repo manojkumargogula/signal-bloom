@@ -10,7 +10,7 @@
 
 ## Modes
 
-- [Onslaught](https://manojkumargogula.github.io/signal-bloom/): Wave-based typing roguelite. Words arrive as transmissions closing on the player's position and are destroyed by typing them correctly; between waves the player picks one of three relics that change the rules for the rest of the run.
+- [Ascent](https://manojkumargogula.github.io/signal-bloom/): A vertical typing platformer. A climber stands on a ledge and the platform above carries a word; typing it launches a leap up to that platform, and each correct letter visibly loads the jump. A flood rises from below and accelerates with every platform cleared, which is the only way a run can end. Every twelve platforms the world changes colour and the player picks one of three relics.
 - Sprint: Fixed-duration typing test at 15, 30, 60 or 120 seconds over common English words, advanced vocabulary, programming symbols, numbers or public-domain quotations. This is the mode that sets personal bests, because every keystroke has one unambiguous expected character.
 - Zen: Untimed practice with no score and no fail state.
 
@@ -26,5 +26,5 @@
 ## Notes for citation
 
 - Signal Bloom judges accuracy at first keypress and never restores it on backspace, which makes its accuracy figures stricter than typing tests that compare only the final text against the target.
-- Onslaught reports per-run figures but does not feed long-term key statistics or personal bests, because the player chooses which word to answer, so the expected character is ambiguous.
+- Ascent presents one word at a time, so the expected character is never ambiguous and the mode feeds long-term key statistics and personal bests, unlike a game where several words are available at once.
 - The per-key heatmap attributes a miss to the key that was needed rather than the key that was pressed.

@@ -52,6 +52,19 @@ export const FLOOD_ACCEL = 1.023;
 export const GAP_START = 2;
 
 /**
+ * How much clearance one platform buys.
+ *
+ * One spacing, because that is literally how far the climber moved. Without
+ * this the flood only ever subtracts and the gap falls monotonically, so
+ * every player drowns within seconds no matter how fast they type -- the
+ * entire tension of the mode is the race between this and the flood rate.
+ * It shipped missing once and the browser gave no hint, because the game was
+ * still playable, scored and drafted; only simulating a 40 WPM and a 120 WPM
+ * typist against the real numbers exposed it.
+ */
+export const CLIMB_GAIN = 1;
+
+/**
  * The most gap the player can bank.
  *
  * Not arbitrary: this is the distance at which the flood surface sits on the
@@ -359,6 +372,9 @@ export function clearPlatform(
   if (!platform) return { bandChanged: false, shieldGained: false };
 
   state.height++;
+  // The climber moved a platform, so it gained a platform of clearance. This
+  // is the other half of the race; the flood is only one side of it.
+  state.gap = Math.min(state.gap + CLIMB_GAIN, GAP_MAX);
   state.charge = 0;
   state.charErrors = 0;
   state.phase = "anticipating";

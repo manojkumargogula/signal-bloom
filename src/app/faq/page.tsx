@@ -53,7 +53,7 @@ const FAQ: { id: string; question: string; answer: string }[] = [
     id: "mobile",
     question: "Does Signal Bloom work on mobile?",
     answer:
-      "It runs on a phone or tablet and the on-screen keyboard will open, but the game is designed for a physical keyboard. Sprint and Zen are usable on a touch keyboard; Onslaught expects two hands on real keys and is much harder without them.",
+      "It runs on a phone or tablet and the on-screen keyboard will open, but the game is designed for a physical keyboard. Sprint and Zen are usable on a touch keyboard; Ascent expects two hands on real keys and is much harder without them.",
   },
   {
     id: "layouts",
@@ -77,7 +77,7 @@ const FAQ: { id: string; question: string; answer: string }[] = [
     id: "trust",
     question: "Which mode gives me a real typing speed?",
     answer:
-      "Sprint. It is a conventional timed typing test over a fixed body of text, so its numbers are comparable with any other typing test and it is the mode that sets your personal bests. Onslaught reports the same figures for the run you played but does not feed your long-term statistics, because you choose which word to answer there.",
+      "Sprint, if you want a figure comparable with other typing tests: it is a conventional timed test over a fixed body of text. Ascent's numbers are trustworthy too, because it presents one word at a time and so the character it expected from you is never ambiguous \u2014 it feeds your personal bests and long-term key statistics like Sprint does. What it is not is comparable with a plain typing test, since a rising flood changes how you type.",
   },
   {
     id: "reset",

@@ -41,32 +41,38 @@ export default function HowItWorksPage() {
           your position, and you decode one by typing it before it reaches you. Three modes
           share the same engine and the same analysis."
       >
-        <Answer id="onslaught" question="What happens during an Onslaught wave?">
+        <Answer id="ascent" question="What happens during a climb?">
           <p>
-            Transmissions appear at the rim of the scope on random bearings and close on
-            the centre, where you are. Your first keystroke locks the nearest transmission
-            whose word begins with that character, and you stay locked to it until it is
-            decoded or it breaches the perimeter.
+            Your climber stands on a ledge. The platform above it carries a word, and two
+            more above that carry theirs, so you can read ahead — reading ahead is what
+            removes the pause at every word boundary and lets a fast typist find a rhythm.
           </p>
           <p>
-            That commitment is deliberate. If a mistyped character silently switched
-            targets you would never understand what went wrong, so a wrong key on a locked
-            transmission is simply an error: it breaks your combo and leaves you where you
-            were.
+            Every letter you get right lights up on the slab and visibly loads the jump:
+            the climber sinks into a deeper crouch as the word fills. Finishing the word
+            releases the leap. A wrong letter turns that letter red and costs you, but it
+            never moves you — you stay where you are and try the letter again.
           </p>
           <p>
-            Each wave sends a fixed number of transmissions and gives you a clock. Clear
-            them all and the wave ends. Let the clock run out and it ends anyway, at the
-            cost of a shield. Halfway through a wave a carrier arrives, carrying a longer
-            word and moving more slowly than the rest.
+            A flood rises from below the whole time, and it speeds up with every platform
+            you clear. It is the only thing that can end a run. Mistakes feed it: once your
+            shields are gone, a wrong letter costs you distance from the water. So the
+            flood is the reason to type quickly and the water level is also the reason to
+            type accurately — one thing to watch, two ways to lose ground.
+          </p>
+          <p>
+            A word typed with no mistakes at all slows the flood for a moment. It never
+            pushes it back down, only slows it — the water is a threat, not a tide.
           </p>
         </Answer>
 
         <Answer id="relics" question="How do relics change a run?">
           <p>
-            Between waves you are offered three relics and may take one. A relic changes
-            the rules for the rest of the run, and they stack: the point of a run is the
-            build you end up with, not the score by itself.
+            Every twelve platforms completes a band: the world changes colour, a shield
+            appears on an upcoming platform, the words get longer, and you are offered
+            three relics and may take one. A relic changes the rules for the rest of the
+            climb, and they stack: the point of a run is the build you end up with, not
+            the height by itself.
           </p>
           <p>
             There are {RELICS.length} relics at three rarities. Common relics adjust the
@@ -84,6 +90,23 @@ export default function HowItWorksPage() {
           </ul>
         </Answer>
 
+        <Answer id="difficulty" question="How does the climb get harder?">
+          <p>
+            Two ways, and neither is the flood alone. Word length steps up with each band,
+            from single letters at the very start to eight, and it stops there: past eight
+            letters a longer word only buys more seconds per platform, which turns the leap
+            into rare punctuation instead of a reward for each word.
+          </p>
+          <p>
+            The rest is the flood, which multiplies its speed by a little over two percent
+            for every platform you clear. Because it accelerates per platform rather than
+            per second, a slower typist never meets a fast flood — it is fast because you
+            climbed, not because time passed — so one curve works for everybody. A run
+            tends to last about the same length of time whatever your speed; how far up you
+            get is what differs.
+          </p>
+        </Answer>
+
         <Answer id="sprint" question="How does Sprint choose its words?">
           <p>
             Sprint draws from a shuffled bag rather than picking at random, so every word
@@ -99,10 +122,10 @@ export default function HowItWorksPage() {
 
         <Answer id="scoring" question="How is a run scored?">
           <p>
-            Score applies only to Onslaught. Each decoded transmission is worth ten points
-            per character, multiplied by your current combo and by a bonus for decoding
-            without a single mistake. Your combo rises with every decode and resets to zero
-            on any mistyped character or any transmission that gets through.
+            Score applies only to Ascent, and it is deliberately two things rather than
+            four: ten points per platform, multiplied by your combo. Your combo rises with
+            every word typed without a mistake and resets on any wrong letter. Height is
+            the number worth bragging about.
           </p>
           <p>
             Sprint and Zen have no score. Their output is the analysis, which is the point
@@ -113,8 +136,8 @@ export default function HowItWorksPage() {
         <Answer id="reproducible" question="Are runs reproducible?">
           <p>
             Yes. Every run is defined by a seed, and all randomness — which words appear,
-            where transmissions arrive, which relics are offered — is derived from it. The
-            same seed produces the same run.
+            which side of the route each platform sits on, which relics are offered — is
+            derived from it. The same seed produces the same climb.
           </p>
           <p>
             Each of those draws its own independent stream from the seed, so adding a new
