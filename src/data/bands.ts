@@ -32,7 +32,19 @@ export interface BandTheme {
   word: string;
   /** Letters already typed. */
   wordDone: string;
-  /** The flood. */
+  /**
+   * The flood, and the foam on its crest.
+   *
+   * Both are checked against the BOTTOM stop of `skyFallback`, which is the
+   * colour the rising water actually meets. That check is not decoration:
+   * every one of these five pairs failed it when it was first written. The
+   * dawn band's foam was the app's amber accent on an amber sky, so the crest
+   * line was not visible at all, and the four dark bands had water within
+   * 1.07:1 of their own skies -- a mass of water you cannot see is not water
+   * rising, it is a filter. So the water is LIGHTER than the sky it rises
+   * against, which is also what a body of water reflecting a sky does at
+   * night, and the foam is lighter again.
+   */
   water: string;
   waterFoam: string;
 }
@@ -53,8 +65,12 @@ export const BANDS: BandTheme[] = [
     slabEdge: "#ffb627",
     word: "#f4ead8",
     wordDone: "#ffb627",
-    water: "#3a2a14",
-    waterFoam: "#c98c14",
+    // A dawn lake, not mud. The first pass gave this band a warm brown water
+    // under a warm amber sky, which read as haze over the valley floor rather
+    // than as a surface -- it passed a luminance check and still looked wrong.
+    // Cooling it is what makes it a liquid.
+    water: "#2a4a4e",
+    waterFoam: "#fff2d0",
   },
   {
     id: "pine",
@@ -66,8 +82,8 @@ export const BANDS: BandTheme[] = [
     slabEdge: "#5fd6b4",
     word: "#e6f2ee",
     wordDone: "#5fd6b4",
-    water: "#0b2b2a",
-    waterFoam: "#3f9c86",
+    water: "#17635a",
+    waterFoam: "#8fe3c8",
   },
   {
     id: "storm",
@@ -79,8 +95,8 @@ export const BANDS: BandTheme[] = [
     slabEdge: "#a99cf5",
     word: "#eeecf7",
     wordDone: "#a99cf5",
-    water: "#191a2c",
-    waterFoam: "#6f66b8",
+    water: "#4c5089",
+    waterFoam: "#9a93e0",
   },
   {
     id: "night",
@@ -92,8 +108,8 @@ export const BANDS: BandTheme[] = [
     slabEdge: "#7fb3ff",
     word: "#e8eef8",
     wordDone: "#7fb3ff",
-    water: "#0a1024",
-    waterFoam: "#4a76b8",
+    water: "#204a8c",
+    waterFoam: "#7ba6e8",
   },
   {
     id: "aurora",
@@ -105,8 +121,8 @@ export const BANDS: BandTheme[] = [
     slabEdge: "#79f0c0",
     word: "#e4f7ee",
     wordDone: "#79f0c0",
-    water: "#04140f",
-    waterFoam: "#3fae83",
+    water: "#0f5240",
+    waterFoam: "#7ff0c4",
   },
 ];
 

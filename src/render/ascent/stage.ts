@@ -51,6 +51,19 @@ const SPACING = 0.15;
 export const SLAB_HEIGHT = 52;
 /** The ledge underfoot is shorter than a word slab, and the climber stands on IT. */
 export const LEDGE_HEIGHT = 18;
+
+/**
+ * Where the waterline sits inside the flood element, in pixels from its top.
+ *
+ * The flood is a full-height body of water translated down out of the field
+ * rather than a box whose height is animated, and its top edge is above the
+ * waterline: the wave band straddles the line so crests rise into the sky and
+ * troughs bite into the water. So the renderer has to translate by
+ * `surface - WATER_LINE_OFFSET`, and this is the one place the number that
+ * couples `.flood-surface` in CSS to that arithmetic is written down. Every
+ * geometry bug in this file so far has been a number written twice.
+ */
+export const WATER_LINE_OFFSET = 14;
 export const CLIMBER_WIDTH = 58;
 export const CLIMBER_HEIGHT = 76;
 

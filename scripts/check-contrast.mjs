@@ -170,9 +170,19 @@ for (const [name, vars] of THEMES) {
     }
   }
 
+  const hex = "(#[0-9a-fA-F]{3,8})";
   const themes = [
     ...bands.matchAll(
-      /id:\s*"([^"]+)"[\s\S]*?slab:\s*"(#[0-9a-fA-F]{3,8})"[\s\S]*?slabEdge:\s*"(#[0-9a-fA-F]{3,8})"[\s\S]*?word:\s*"(#[0-9a-fA-F]{3,8})"[\s\S]*?wordDone:\s*"(#[0-9a-fA-F]{3,8})"/g,
+      new RegExp(
+        `id:\\s*"([^"]+)"` +
+          `[\\s\\S]*?slab:\\s*"${hex}"` +
+          `[\\s\\S]*?slabEdge:\\s*"${hex}"` +
+          `[\\s\\S]*?word:\\s*"${hex}"` +
+          `[\\s\\S]*?wordDone:\\s*"${hex}"` +
+          `[\\s\\S]*?water:\\s*"${hex}"` +
+          `[\\s\\S]*?waterFoam:\\s*"${hex}"`,
+        "g",
+      ),
     ),
   ];
 
@@ -181,13 +191,32 @@ for (const [name, vars] of THEMES) {
     failed++;
   } else {
     console.log(`\n  band themes (${themes.length})`);
-    for (const [, id, slab, edge, word, done] of themes) {
+    for (const [, id, slab, edge, word, done, water, foam] of themes) {
+      // `skyFallback` runs top to bottom and the water meets the BOTTOM of
+      // it, so that stop is the colour the flood is judged against.
+      const skyBottom = skyLow(bands, id);
+      if (!skyBottom) {
+        console.log(`    FAIL  ${id} — could not read skyFallback`);
+        failed++;
+        continue;
+      }
+
       // The word and its typed prefix are body text on the slab and carry the
       // whole game, so both take the full 4.5:1. The lit edge is a graphic.
+      //
+      // The waterline is checked against the sky because it is the fail state
+      // made visible -- the distance between the climber and the water IS the
+      // thing the player has to read -- and it shipped invisible once: the
+      // dawn band's foam was the app's amber accent on an amber sky, so the
+      // crest line simply was not there. It is a non-text graphic, hence
+      // 3:1 per WCAG 1.4.11. The body of water only needs to be separable
+      // from the sky, so it takes a plain 2:1 floor.
       const checks = [
         ["word on slab", word, slab, 4.5],
         ["typed prefix on slab", done, slab, 4.5],
         ["active frame on slab", edge, slab, 3.0],
+        ["foam crest on sky", foam, skyBottom, 3.0],
+        ["water body on sky", water, skyBottom, 2.0],
       ];
       for (const [use, fg, bg, min] of checks) {
         const r = ratio(fg, bg);
@@ -199,6 +228,16 @@ for (const [name, vars] of THEMES) {
       }
     }
   }
+}
+
+/**
+ * The bottom stop of a band's sky gradient, which is the colour the flood
+ * rises against.
+ */
+function skyLow(source, id) {
+  const theme = source.slice(source.indexOf(`id: "${id}"`));
+  const m = /skyFallback:\s*\["(#[0-9a-fA-F]{3,8})",\s*"(#[0-9a-fA-F]{3,8})"\]/.exec(theme);
+  return m ? m[2] : null;
 }
 
 console.log(failed === 0 ? "\nAll checks pass.\n" : `\n${failed} failure(s).\n`);

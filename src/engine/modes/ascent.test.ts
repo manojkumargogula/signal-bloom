@@ -11,6 +11,7 @@ import {
   ERROR_COST,
   FLOOD_ACCEL,
   FLOOD_BASE,
+  FLOOD_GRACE_PLATFORMS,
   GAP_MAX,
   jumpProgress,
   lengthForBand,
@@ -249,29 +250,51 @@ describe("the softlock escape", () => {
 });
 
 describe("the flood", () => {
+  it("stays completely still for the opening platforms", () => {
+    // The opening has to be readable before it is survivable.
+    const { state, ctx } = start(["ab"]);
+    expect(state.floodRate).toBe(0);
+
+    for (let i = 0; i < FLOOD_GRACE_PLATFORMS; i++) climb(state, ctx, i * 1000);
+    expect(state.floodRate).toBeCloseTo(FLOOD_BASE, 5);
+  });
+
+  it("does not move the water at all during the grace period", () => {
+    const { state } = start(["ab"]);
+    const before = state.gap;
+    for (let i = 0; i < 600; i++) stepAscent(state, DT);
+    expect(state.gap).toBe(before);
+  });
+
   it("accelerates per platform cleared, never per second", () => {
-    // The whole reason one curve can serve a 40 WPM player and a 120 WPM
+    // The whole reason one curve can serve a 15 WPM player and a 120 WPM
     // player: the flood is fast because you climbed, not because time passed.
     const { state, ctx } = start(["ab"]);
-    expect(state.floodRate).toBeCloseTo(FLOOD_BASE, 5);
+    for (let i = 0; i < FLOOD_GRACE_PLATFORMS; i++) climb(state, ctx, i * 1000);
 
+    const rate = state.floodRate;
     for (let i = 0; i < 600; i++) stepAscent(state, DT);
-    expect(state.floodRate).toBeCloseTo(FLOOD_BASE, 5);
+    expect(state.floodRate).toBeCloseTo(rate, 5);
 
-    climb(state, ctx, 0);
+    climb(state, ctx, 9000);
     expect(state.floodRate).toBeCloseTo(FLOOD_BASE * FLOOD_ACCEL, 5);
   });
 
-  it("matches the tuning arithmetic at band four", () => {
-    // 0.40 * 1.023^42 should be about 1.04 spacings per second, giving a
-    // 120 WPM typist on seven-letter words a little under a second of slack.
-    const rate = FLOOD_BASE * FLOOD_ACCEL ** 42;
-    expect(rate).toBeGreaterThan(1.0);
-    expect(rate).toBeLessThan(1.1);
+  it("keeps the rate survivable well into a long climb", () => {
+    // At platform 60 a 60 WPM typist on seven-letter words needs roughly a
+    // second per platform, so the rate has to stay near 1.0 that deep or the
+    // curve has been steepened by accident.
+    const rate = FLOOD_BASE * FLOOD_ACCEL ** (60 - FLOOD_GRACE_PLATFORMS);
+    expect(rate).toBeGreaterThan(0.3);
+    expect(rate).toBeLessThan(0.6);
   });
 
   it("drowns the climber when the gap closes", () => {
-    const { state } = start(["ab"]);
+    // Past the grace period first: during it the flood does not move at all,
+    // so nothing can close the gap.
+    const { state, ctx } = start(["ab"]);
+    for (let i = 0; i < FLOOD_GRACE_PLATFORMS; i++) climb(state, ctx, i * 1000);
+
     state.gap = 0.05;
     for (let i = 0; i < 60; i++) stepAscent(state, DT);
     expect(state.drowned).toBe(true);
@@ -555,20 +578,39 @@ describe("flood tuning against real player speeds", () => {
     return { height: state.height, seconds: t / 1000 };
   }
 
+  it("gives an 18 WPM beginner a run of about two minutes", () => {
+    // The exact case that exposed the first tuning: a real player, reading
+    // the words rather than racing them, drowned in 31 seconds. The bottom of
+    // the range is where this has to be checked.
+    const run = simulate(18, 12);
+    expect(run.seconds).toBeGreaterThan(75);
+    expect(run.height).toBeGreaterThan(PLATFORMS_PER_BAND * 2);
+  });
+
+  it("gives every skill level a run of comparable length", () => {
+    const runs = [15, 25, 40, 80, 120].map((wpm) => simulate(wpm, 15).seconds);
+    const spread = Math.max(...runs) / Math.min(...runs);
+    // Solved for, not guessed: the sweep that produced these constants scored
+    // exactly this property across the whole range.
+    expect(spread).toBeLessThan(2.2);
+  });
+
   it("reports where each skill level actually tops out", () => {
     // Not an assertion so much as a record: these are the numbers the
     // acceleration rate was chosen to produce, and seeing them move is the
     // point of having the simulation at all.
-    const slow = simulate(40, 12);
-    const mid = simulate(80, 18);
-    const fast = simulate(120, 25);
+    const rows = [15, 18, 40, 80, 120].map((wpm) => ({ wpm, ...simulate(wpm, 15) }));
     console.log(
-      `    40 WPM -> ${slow.height} platforms in ${slow.seconds.toFixed(0)}s\n` +
-        `    80 WPM -> ${mid.height} platforms in ${mid.seconds.toFixed(0)}s\n` +
-        `   120 WPM -> ${fast.height} platforms in ${fast.seconds.toFixed(0)}s`,
+      rows
+        .map(
+          (r) =>
+            `   ${String(r.wpm).padStart(3)} WPM -> ${String(r.height).padStart(3)} platforms in ${r.seconds.toFixed(0)}s`,
+        )
+        .join("\n"),
     );
-    expect(slow.height).toBeLessThan(mid.height);
-    expect(mid.height).toBeLessThan(fast.height);
+    for (let i = 1; i < rows.length; i++) {
+      expect(rows[i].height).toBeGreaterThan(rows[i - 1].height);
+    }
   });
 
   it("lets a 40 WPM beginner clear the first band comfortably", () => {

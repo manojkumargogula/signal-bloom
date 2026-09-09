@@ -12,7 +12,7 @@ import { useMotionPrefs } from "@/react/useMotionPrefs";
 import { asset } from "@/lib/paths";
 import { readColour } from "@/render/palette";
 import { Climber } from "@/render/ascent/climber";
-import { AscentStage } from "@/render/ascent/stage";
+import { AscentStage, WATER_LINE_OFFSET } from "@/render/ascent/stage";
 import { ParticleLayer } from "@/render/particles";
 import { PARTICLE_BUDGET, QualityMonitor } from "@/render/quality";
 import { Hud } from "./hud/Hud";
@@ -78,6 +78,8 @@ export function Game({
   const flinchRef = useRef(0);
   /** The band whose colours are currently applied, so writes are rare. */
   const appliedBandRef = useRef(-1);
+  /** Whether the water is already in its warning state, so writes are rare. */
+  const dangerRef = useRef(false);
   const [bandForSky, setBandForSky] = useState(1);
 
   /**
@@ -281,15 +283,27 @@ export function Game({
         );
 
         // ---- the flood ---------------------------------------------------
-        // Positioned from the gap, so the fail state is literally the
-        // distance on screen between the climber's feet and the water.
         const flood = floodRef.current;
         if (flood) {
           // The fail state, literally: the distance on screen between the
           // climber's feet and the water IS the gap. Nothing else to read.
           const clearance = ascent.gap / engine.state.stats.gapMax;
           const surface = feetY + clearance * (viewport.height - feetY);
-          flood.style.height = `${Math.max(0, viewport.height - surface).toFixed(1)}px`;
+
+          // A transform, never a height: the water is a full-height body slid
+          // up behind the world. `height` is a layout property, and writing it
+          // every frame reflowed the whole field -- and a growing box reads as
+          // a bar chart where a rising body of water reads as water.
+          flood.style.transform =
+            `translate3d(0, ${(surface - WATER_LINE_OFFSET).toFixed(1)}px, 0)`;
+
+          // The last fifth of the gap is where the run is decided, so the
+          // water says so. Written only on the crossing, not every frame.
+          const danger = clearance < 0.2;
+          if (danger !== dangerRef.current) {
+            dangerRef.current = danger;
+            flood.dataset.danger = danger ? "true" : "false";
+          }
         }
 
         // ---- parallax ----------------------------------------------------
@@ -411,7 +425,10 @@ export function Game({
       </div>
 
       {/* Layer 1: the climb */}
-      <div ref={fieldRef} className="relative z-10 min-h-0 flex-1">
+      {/* `overflow-hidden` because the flood is a full viewport tall and slides
+          down out of the field -- without it the water paints over the status
+          bar below. It also clips the climb at the field edge, which is right. */}
+      <div ref={fieldRef} className="relative z-10 min-h-0 flex-1 overflow-hidden">
         {/* Layer 2: dust and sparks */}
         <canvas
           ref={fxRef}
@@ -419,7 +436,20 @@ export function Game({
           className="pointer-events-none absolute inset-0 h-full w-full"
         />
 
-        {isAscent && <div ref={floodRef} aria-hidden="true" className="flood z-10" />}
+        {/* The water, back to front: a pale swell behind, the mass of water
+            darkening with depth, the sheen of light just under the surface,
+            the crest line riding on top, and the warning wash that appears
+            close to drowning. Layered because the surface has to sit ON the
+            water rather than be a line drawn near it. */}
+        {isAscent && (
+          <div ref={floodRef} aria-hidden="true" className="flood z-10">
+            <div className="flood-swell" />
+            <div className="flood-body" />
+            <div className="flood-sheen" />
+            <div className="flood-surface" />
+            <div className="flood-warning" />
+          </div>
+        )}
 
         {!isAscent && snapshot && (
           <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 px-8 sm:px-16">

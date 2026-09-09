@@ -24,6 +24,19 @@ changes can be checked against the actual game rather than only against tests.
   a percentage `translate` does not resolve on an `<svg>` the way it does on a
   div, and floated 17px up because two different slab heights were hardcoded
   in two places. None of those are visible to a type checker.
+- `water.mjs` — drives the flood, which is the mode's only fail state. Asserts
+  the water is built from its layers with the masks and drifts the browser
+  actually applied, that the level is a `transform` and never an inline
+  `height`, that it rises once the grace platforms are cleared and warns before
+  it kills — and paints all five band palettes at one waterline, so band five
+  does not cost sixty platforms to look at. Written because the water shipped
+  wrong twice: once as a translucent haze the same hue as the sky it rose
+  against, and once with its foam crest set in the app's amber accent on an
+  amber sky, which meant the waterline was not drawn at all.
+- `onescreen.mjs` — asserts the app is one screen, while playing and after the
+  run, in both Sprint and Ascent at three viewport sizes. The single locked
+  viewport is a stated requirement and the kind that decays silently: one panel
+  grows a row, one figure wraps, and the results scroll again.
 - `repeat.mjs` — holds one key down and asserts exactly one character lands.
 - `focus.mjs` — types from every starting focus state, including with focus
   stolen by another element and dropped to the body. Every other test had the

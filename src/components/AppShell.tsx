@@ -152,11 +152,13 @@ export function AppShell() {
           />
         )}
 
+        {/* The results replace the game inside the same locked viewport, with
+            no scroll container. Results is a height-constrained grid that
+            fills exactly this box, so the app is one screen from the first
+            keystroke to the final number. */}
         {result && (
-          <div className="absolute inset-0 overflow-y-auto bg-[var(--bg)]">
-            <div className="mx-auto max-w-5xl px-5 py-6">
-              <Results result={result} onAgain={again} />
-            </div>
+          <div className="absolute inset-0 overflow-hidden bg-[var(--bg)]">
+            <Results result={result} onAgain={again} />
           </div>
         )}
       </div>

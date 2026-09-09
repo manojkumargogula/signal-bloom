@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { SecondSample } from "@/analytics/types";
 
 /**
@@ -14,11 +14,26 @@ import type { SecondSample } from "@/analytics/types";
  * Both on ONE axis -- they share a unit, and a second scale would make the
  * comparison a lie. A table view is provided for assistive technology, and
  * both series are directly labelled so identity is never colour alone.
+ *
+ * ## Why it measures its own box
+ *
+ * This was a fixed 720x220 viewBox scaled to the container width, which was
+ * fine on a scrolling page and wrong on a single-screen dashboard: the panel
+ * is as tall as its grid row gives it, and a fixed aspect ratio left a couple
+ * of hundred pixels of nothing under the plot. So the box is measured and one
+ * SVG unit is one CSS pixel. Stroke widths and label sizes are then exact at
+ * every size rather than scaled along with the geometry, and the height the
+ * layout has spare becomes vertical resolution for the series.
  */
 
-const W = 720;
-const H = 220;
 const PAD = { top: 16, right: 16, bottom: 28, left: 40 };
+
+/** Used for the first paint and wherever ResizeObserver is unavailable. */
+const FALLBACK = { width: 720, height: 240 };
+
+/** Below these the plot stops being a chart, so it stops shrinking. */
+const MIN_WIDTH = 320;
+const MIN_HEIGHT = 150;
 
 interface WpmChartProps {
   series: readonly SecondSample[];
@@ -27,10 +42,15 @@ interface WpmChartProps {
 export function WpmChart({ series }: WpmChartProps) {
   const titleId = useId();
   const [hover, setHover] = useState<number | null>(null);
+  const plotRef = useRef<HTMLDivElement>(null);
+  const box = useMeasuredBox(plotRef);
+
+  const W = Math.max(MIN_WIDTH, Math.floor(box.width));
+  const H = Math.max(MIN_HEIGHT, Math.floor(box.height));
 
   const points = useMemo(() => series.filter((s) => !s.partial), [series]);
 
-  const { netPath, rawPath, maxY, xOf, yOf, ticks } = useMemo(() => {
+  const { netPath, rawPath, xOf, yOf, ticks } = useMemo(() => {
     const max = Math.max(40, ...points.map((p) => Math.max(p.raw, p.net))) * 1.12;
     const innerW = W - PAD.left - PAD.right;
     const innerH = H - PAD.top - PAD.bottom;
@@ -40,21 +60,25 @@ export function WpmChart({ series }: WpmChartProps) {
     const y = (v: number) => PAD.top + innerH - (v / max) * innerH;
 
     const line = (get: (p: SecondSample) => number) =>
-      points.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(get(p)).toFixed(1)}`).join(" ");
+      points
+        .map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(get(p)).toFixed(1)}`)
+        .join(" ");
 
-    const step = max > 160 ? 50 : max > 80 ? 25 : 20;
+    // Tick spacing follows the range AND the height: a tall plot carries more
+    // gridlines usefully, a short one would turn them into a hatch.
+    const room = Math.max(2, Math.floor(innerH / 42));
+    const step = [10, 20, 25, 50, 100].find((s) => max / s <= room) ?? 200;
     const tickValues: number[] = [];
     for (let v = 0; v <= max; v += step) tickValues.push(v);
 
     return {
       netPath: line((p) => p.net),
       rawPath: line((p) => p.raw),
-      maxY: max,
       xOf: x,
       yOf: y,
       ticks: tickValues,
     };
-  }, [points]);
+  }, [points, W, H]);
 
   if (points.length < 2) {
     return (
@@ -67,8 +91,8 @@ export function WpmChart({ series }: WpmChartProps) {
   const active = hover === null ? null : points[hover];
 
   return (
-    <figure className="m-0">
-      <figcaption className="mb-3 flex items-baseline justify-between gap-4">
+    <figure className="m-0 flex h-full min-h-0 flex-col">
+      <figcaption className="mb-3 flex shrink-0 items-baseline justify-between gap-4">
         <h3 className="text-sm font-semibold text-[var(--fg)]">Speed over the run</h3>
         <span className="flex items-center gap-4 text-xs">
           <span className="flex items-center gap-1.5">
@@ -82,12 +106,16 @@ export function WpmChart({ series }: WpmChartProps) {
         </span>
       </figcaption>
 
-      <div className="overflow-x-auto">
+      {/* The plot is absolutely positioned inside the measured box, so its own
+          size can never feed back into the box it was measured from. */}
+      <div ref={plotRef} className="relative min-h-0 flex-1">
         <svg
           viewBox={`0 0 ${W} ${H}`}
+          width={W}
+          height={H}
           role="img"
           aria-labelledby={titleId}
-          className="h-auto w-full min-w-[32rem]"
+          className="absolute inset-0"
           onMouseLeave={() => setHover(null)}
         >
           <title id={titleId}>
@@ -193,7 +221,7 @@ export function WpmChart({ series }: WpmChartProps) {
         </svg>
       </div>
 
-      <div className="num mt-2 h-5 text-xs text-[var(--fg-muted)]">
+      <div className="num mt-2 h-5 shrink-0 text-xs text-[var(--fg-muted)]">
         {active
           ? `${active.second}s — net ${Math.round(active.net)} · raw ${Math.round(active.raw)}${
               active.errors > 0 ? ` · ${active.errors} error${active.errors > 1 ? "s" : ""}` : ""
@@ -202,7 +230,7 @@ export function WpmChart({ series }: WpmChartProps) {
       </div>
 
       {/* The same data as a table, so the chart is not the only way in. */}
-      <details className="mt-2">
+      <details className="mt-2 shrink-0">
         <summary className="cursor-pointer text-xs text-[var(--fg-muted)] hover:text-[var(--fg)]">
           View as table
         </summary>
@@ -230,7 +258,45 @@ export function WpmChart({ series }: WpmChartProps) {
           </table>
         </div>
       </details>
-      <span className="sr-only">{`Maximum charted speed ${Math.round(maxY)} words per minute.`}</span>
     </figure>
   );
+}
+
+/**
+ * The element's content box, kept current.
+ *
+ * A layout effect takes the first measurement so the fallback size is never
+ * painted, and a ResizeObserver keeps it after that -- a window resize
+ * listener would miss the cases that matter here, which are the panel
+ * changing size because a sibling did.
+ */
+function useMeasuredBox(ref: React.RefObject<HTMLElement | null>) {
+  const [box, setBox] = useState(FALLBACK);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      setBox({ width: rect.width, height: rect.height });
+    }
+  }, [ref]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (!rect || rect.width <= 0 || rect.height <= 0) return;
+      setBox((prev) =>
+        Math.abs(prev.width - rect.width) < 1 && Math.abs(prev.height - rect.height) < 1
+          ? prev
+          : { width: rect.width, height: rect.height },
+      );
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref]);
+
+  return box;
 }

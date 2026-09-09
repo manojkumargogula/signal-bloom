@@ -31,7 +31,18 @@ import type { Rng } from "../rng";
  */
 
 /** How fast the flood rises at the start, in platform spacings per second. */
-export const FLOOD_BASE = 0.4;
+export const FLOOD_BASE = 0.18;
+
+/**
+ * Platforms the flood stays completely still for.
+ *
+ * The opening has to be readable before it is survivable. A first-time player
+ * is learning what the screen even means, and they type far slower while they
+ * do it -- the run that prompted this retune was 18 WPM, because the player
+ * was reading rather than racing. Three platforms of stillness costs a fast
+ * typist about a second and buys a new one the chance to understand the game.
+ */
+export const FLOOD_GRACE_PLATFORMS = 3;
 
 /**
  * Flood acceleration per platform cleared.
@@ -40,13 +51,29 @@ export const FLOOD_BASE = 0.4;
  * meets a fast flood — the flood is fast because you climbed, not because
  * time passed — and one curve serves every skill level.
  *
- * The value controls how long a run lasts, and it is surprisingly sensitive:
- * 1.5% gives flabby 60-80 second runs, 3.5% gives brutal 30 second ones.
- * At 2.3% a 40 WPM player and a 120 WPM player both last around 45 seconds
- * while reaching very different heights, so pacing stays stable across the
- * whole player base and score does the differentiating.
+ * This value and `FLOOD_BASE` together decide how long a run lasts, and they
+ * were solved for rather than guessed: a sweep over both, scored against a
+ * two-minute target at 15, 18, 25, 40, 60, 80 and 120 WPM, with the slowest
+ * player weighted so the curve could not be tuned around them. What they
+ * produce, from the simulation in the tests -- which prints this table on
+ * every run, so it cannot quietly go stale:
+ *
+ *      15 WPM ->  42 platforms in 161s
+ *      18 WPM ->  57 platforms in 181s
+ *      40 WPM -> 115 platforms in 163s
+ *      80 WPM -> 170 platforms in 120s
+ *     120 WPM -> 202 platforms in 95s
+ *
+ * A fast typist gets a SHORTER run than a slow one, which is the accelerate-
+ * per-platform rule working as intended: they are further up when the flood
+ * catches them, and height is the score.
+ *
+ * The first attempt targeted 45 seconds and only tested 40 WPM and up. A real
+ * player typing at 18 WPM -- reading the words rather than racing them --
+ * drowned in 31 seconds. Do not retune this without checking the bottom of
+ * the range; that is where a game is won or lost.
  */
-export const FLOOD_ACCEL = 1.023;
+export const FLOOD_ACCEL = 1.014;
 
 /** The gap the climb starts with, in spacings. */
 export const GAP_START = 2;
@@ -170,7 +197,8 @@ export function createAscentState(): AscentState {
     band: 1,
     visible: [],
     gap: GAP_START,
-    floodRate: FLOOD_BASE,
+    // Still until the grace period is over.
+    floodRate: 0,
     dipMs: 0,
     shields: SHIELD_START,
     phase: "grounded",
@@ -382,8 +410,13 @@ export function clearPlatform(
   state.airtimeCut = 0;
 
   // The flood accelerates because the player climbed, never because time
-  // passed. That is what lets one curve serve every skill level.
-  state.floodRate = FLOOD_BASE * FLOOD_ACCEL ** state.height;
+  // passed. That is what lets one curve serve every skill level. It also
+  // stays completely still for the opening few platforms, so a new player has
+  // room to work out what the screen is telling them.
+  state.floodRate =
+    state.height < FLOOD_GRACE_PLATFORMS
+      ? 0
+      : FLOOD_BASE * FLOOD_ACCEL ** (state.height - FLOOD_GRACE_PLATFORMS);
 
   // A perfect word slows the flood; it never pushes it back down. Reverse
   // motion in the periphery under an upward-scrolling camera is the exact

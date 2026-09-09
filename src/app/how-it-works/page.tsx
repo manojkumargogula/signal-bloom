@@ -54,11 +54,16 @@ export default function HowItWorksPage() {
             never moves you — you stay where you are and try the letter again.
           </p>
           <p>
-            A flood rises from below the whole time, and it speeds up with every platform
-            you clear. It is the only thing that can end a run. Mistakes feed it: once your
-            shields are gone, a wrong letter costs you distance from the water. So the
-            flood is the reason to type quickly and the water level is also the reason to
-            type accurately — one thing to watch, two ways to lose ground.
+            A flood rises from below and speeds up with every platform you clear. It is
+            the only thing that can end a run. Mistakes feed it: once your shields are
+            gone, a wrong letter costs you distance from the water. So the flood is the
+            reason to type quickly and the water level is also the reason to type
+            accurately — one thing to watch, two ways to lose ground.
+          </p>
+          <p>
+            It holds completely still for your first three platforms. The opening has to
+            be readable before it is survivable, and a first-time player types far slower
+            while they are working out what the screen means.
           </p>
           <p>
             A word typed with no mistakes at all slows the flood for a moment. It never
@@ -98,12 +103,15 @@ export default function HowItWorksPage() {
             into rare punctuation instead of a reward for each word.
           </p>
           <p>
-            The rest is the flood, which multiplies its speed by a little over two percent
-            for every platform you clear. Because it accelerates per platform rather than
-            per second, a slower typist never meets a fast flood — it is fast because you
-            climbed, not because time passed — so one curve works for everybody. A run
-            tends to last about the same length of time whatever your speed; how far up you
-            get is what differs.
+            The rest is the flood, which multiplies its speed by about one and a half
+            percent for every platform you clear. Because it accelerates per platform
+            rather than per second, a slower typist never meets a fast flood — it is fast
+            because you climbed, not because time passed — so one curve works for
+            everybody. Runs land between about a minute and a half and three minutes at
+            every speed, and how far up you get is what differs: around forty platforms
+            at fifteen words a minute, two hundred at a hundred and twenty. Typing faster
+            makes the run shorter, not longer — you are simply much higher when the water
+            reaches you, and height is the score.
           </p>
         </Answer>
 
