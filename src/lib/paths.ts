@@ -44,7 +44,8 @@ export const SITE = {
    */
   description:
     "Signal Bloom is a free, open-source browser typing game that measures how you actually type. " +
-    "Play a wave-based typing roguelite or a standard timed test, then read your net WPM, raw WPM, " +
-    "accuracy, consistency, per-key heatmap and problem bigrams. No account, no server.",
+    "Climb a signal array while a flood rises under you \u2014 there is no clock, only the water \u2014 " +
+    "then read your net WPM, raw WPM, accuracy, consistency, per-key heatmap and problem bigrams. " +
+    "No account, no server.",
   tagline: "A typing game that measures how you actually type.",
 } as const;

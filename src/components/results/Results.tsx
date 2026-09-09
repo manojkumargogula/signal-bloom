@@ -72,7 +72,7 @@ export function Results({ result, onAgain }: ResultsProps) {
     getBestsServerSnapshot,
   );
 
-  const best = bests[bestKey({ mode: result.mode, durationMs: m.durationMs })];
+  const best = bests[bestKey({ mode: result.mode })];
   const isBest = m.valid && (!best || m.wpm >= best.wpm);
 
   /**
@@ -200,7 +200,7 @@ export function Results({ result, onAgain }: ResultsProps) {
               <ErrorCounts counts={m.errorEvents} corrected={m.charCounts.corrected} />
             </Panel>
             <Panel>
-              <History mode={result.mode} durationMs={m.durationMs} />
+              <History mode={result.mode} />
             </Panel>
           </div>
         </div>

@@ -53,7 +53,7 @@ const FAQ: { id: string; question: string; answer: string }[] = [
     id: "mobile",
     question: "Does Signal Bloom work on mobile?",
     answer:
-      "It runs on a phone or tablet and the on-screen keyboard will open, but the game is designed for a physical keyboard. Sprint and Zen are usable on a touch keyboard; Ascent expects two hands on real keys and is much harder without them.",
+      "It runs on a phone or tablet and the on-screen keyboard will open, but the game is designed for a physical keyboard: it expects two hands on real keys and is much harder without them.",
   },
   {
     id: "layouts",
@@ -75,9 +75,9 @@ const FAQ: { id: string; question: string; answer: string }[] = [
   },
   {
     id: "trust",
-    question: "Which mode gives me a real typing speed?",
+    question: "Is the typing speed it reports a real one?",
     answer:
-      "Sprint, if you want a figure comparable with other typing tests: it is a conventional timed test over a fixed body of text. Ascent's numbers are trustworthy too, because it presents one word at a time and so the character it expected from you is never ambiguous \u2014 it feeds your personal bests and long-term key statistics like Sprint does. What it is not is comparable with a plain typing test, since a rising flood changes how you type.",
+      "Yes, and it is measured the same way a conventional typing test measures it: net WPM from correctly typed characters over elapsed time, accuracy judged at the first press of each key. The game presents one word at a time, so the character it expected from you is never ambiguous and every keystroke can be judged \u2014 which is what makes the figure trustworthy and lets it feed your personal bests and long-term key statistics. What it is NOT is directly comparable with a calm typing test, because a rising flood changes how you type. Treat it as your speed under pressure.",
   },
   {
     id: "reset",

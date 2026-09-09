@@ -8,10 +8,6 @@ export interface RunConfig {
   mode: ModeId;
   seed: string;
   corpusId: string;
-  /** Sprint only: run length. Ignored by Ascent and Zen. */
-  durationMs?: number;
-  /** Sprint only: fixed word count instead of a duration. */
-  wordCount?: number;
 }
 
 export function createState(config: RunConfig): GameState {
@@ -21,7 +17,7 @@ export function createState(config: RunConfig): GameState {
     phase: "idle",
     simTime: 0,
     pausedMs: 0,
-    ascent: config.mode === "ascent" ? createAscentState() : null,
+    ascent: createAscentState(),
     stats: { ...BASE_STATS },
     relics: [],
     draft: null,

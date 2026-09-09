@@ -37,10 +37,6 @@
   /* Errors, and nothing else. */
   --fault: #ff6b5a;
 
-  --type-pending: #a09a8d;
-  --type-done: #e8e4dc;
-  --type-error: #ff6b5a;
-  --type-caret: #ffb627;
 
   /* Chart series. One hue plus a neutral, distinguished by line style and
      direct labels rather than by a second colour — see WpmChart. */
@@ -72,10 +68,6 @@
   --amber-dim: #7a4800;
   --fault: #c2160b;
 
-  --type-pending: #5c574c;
-  --type-done: #1a1a1c;
-  --type-error: #c2160b;
-  --type-caret: #8a5200;
 
   --series-net: #8a5200;
   --series-raw: #6f6a5e;
@@ -423,170 +415,19 @@ html:has(body[data-scroll="true"]) {
 
 /* ------------------------------------------------------------- the flood ---- */
 
-/* The flood is a full-height body of water that is TRANSLATED down out of the
-   field, not a box whose height is animated. Two reasons, and both matter:
-
-   1. `height` is a layout property. Writing it sixty times a second forced a
-      reflow of the whole field every frame, on the one element that changes
-      every frame. `transform` is composited, so the water now costs nothing.
-   2. It is what actually makes it read as *filling*. A box that grows is a
-      bar chart; a body of water sliding up behind the world, with its own
-      surface riding on top of it, is water.
-
-   The element's y=0 is well above the waterline, so the renderer translates by
-   `surface - WATER_LINE_OFFSET` (the offset is a shared constant in
-   `render/ascent/stage.ts`, never written twice). */
-.flood {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 100%;
-  will-change: transform;
-  pointer-events: none;
+/* The water is drawn on a canvas, so all this rule has to do is place it.
+ *
+ * It used to be five stacked divs with SVG masks and CSS keyframes, and it
+ * still did not look like water: a fixed wave shape translating at a fixed
+ * speed is a conveyor belt, and CSS cannot express a sum of wave trains at
+ * different speeds -- which is the thing that makes a surface read as liquid.
+ * See `render/ascent/water.ts`.
+ *
+ * Above the climber (z-index 2) and above the platforms on purpose: whatever
+ * the flood has reached is submerged, which is the entire point of it.
+ */
+.water {
   z-index: 3;
-}
-
-/* The mass of water below the surface. Starts 22px down -- below the deepest
-   wave trough -- so its straight top edge is always hidden behind the waves,
-   which is the whole trick. Deep at the bottom, translucent near the top, so
-   the ridges behind it stay faintly visible instead of being cut off by a
-   hard horizon. */
-.flood-body {
-  position: absolute;
-  inset: 22px 0 0 0;
-  /* Nearly opaque immediately, then DARKENING with depth. The first attempt
-     held the water at 62% at the surface so the ridges would stay faintly
-     visible through it; on the dawn band, whose water is a warm brown under a
-     warm sky, that came out as haze rather than as water. Opacity is what
-     separates a liquid from a filter, and depth is what says how deep it is.
-     Both go up.
-
-     The fall-off is steep on purpose. Light penetrating water drops away
-     fast, which is the physical reason -- and the useful side effect is that
-     only a band near the surface is bright, so a full screen of water stays
-     peripheral instead of becoming the most salient thing on it while a word
-     is being read. */
-  background: linear-gradient(
-    to bottom,
-    color-mix(in oklab, var(--water) 88%, transparent) 0%,
-    var(--water) 8%,
-    color-mix(in oklab, var(--water) 78%, black) 34%,
-    color-mix(in oklab, var(--water) 42%, black) 100%
-  );
-}
-
-/* Light on the water, in the few pixels under the crest line.
-   The single most effective cue that a coloured area is a liquid surface: the
-   eye reads a bright band immediately below a moving edge as a specular
-   highlight, and everything below it as depth. Static, so it costs nothing. */
-.flood-sheen {
-  position: absolute;
-  inset: 22px 0 auto 0;
-  height: 26px;
-  background: linear-gradient(
-    to bottom,
-    color-mix(in oklab, var(--water-foam) 42%, transparent) 0%,
-    color-mix(in oklab, var(--water-foam) 12%, transparent) 45%,
-    transparent 100%
-  );
-}
-
-/* The surface.
-
-   Two masked bands of the water colour riding at different wavelengths and
-   speeds. One wave is a shape; two waves at different periods beat against
-   each other and read as a moving liquid surface, which is the cheapest
-   convincing water there is -- no canvas, no shader, no image.
-
-   The drift is horizontal and slow. The motion budget forbids new VERTICAL
-   motion in the periphery while a word is being read, because that is what
-   competes with the camera; a slow lateral swell does not, and it is the only
-   continuous motion allowed down here. */
-.flood-surface {
-  position: absolute;
-  top: 0;
-  /* Room to travel exactly one tile and loop seamlessly. */
-  left: -288px;
-  right: -288px;
-  height: 24px;
-  /* The crest band is the water tinted toward the foam, not the water itself:
-     the lit edge of a wave is brighter than its body, and on a band whose sky
-     shares the water's hue that tint is the only thing that separates the two. */
-  background: color-mix(in oklab, var(--water) 84%, var(--water-foam));
-  -webkit-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 24' preserveAspectRatio='none'><path d='M0 14 C 20 6 40 6 60 14 S 100 22 120 14 S 160 6 180 14 S 220 22 240 14 V 24 H 0 Z' fill='white'/></svg>") repeat-x center / 240px 24px;
-  mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 24' preserveAspectRatio='none'><path d='M0 14 C 20 6 40 6 60 14 S 100 22 120 14 S 160 6 180 14 S 220 22 240 14 V 24 H 0 Z' fill='white'/></svg>") repeat-x center / 240px 24px;
-  /* A drop-shadow follows the mask's alpha, so the foam sits exactly on the
-     crest line -- which a box-shadow or a straight ::before line cannot do. */
-  /* Two shadows, both following the mask's alpha so they sit exactly on the
-     crest: a hard 2px line of foam, and a soft bloom above it so the line
-     still separates from a sky that happens to be the same hue. A box-shadow
-     or a straight `::before` line cannot follow a mask, which is why the foam
-     is a filter. */
-  filter: drop-shadow(0 -2px 0 var(--water-foam))
-    drop-shadow(0 -5px 7px color-mix(in oklab, var(--water-foam) 55%, transparent));
-  animation: flood-drift 11s linear infinite;
-}
-
-/* The swell behind, at a longer wavelength and about half the speed. Paler,
-   and painted under the body, so only its crests show above the waterline. */
-.flood-swell {
-  position: absolute;
-  top: 0;
-  left: -288px;
-  right: -288px;
-  height: 24px;
-  background: color-mix(in oklab, var(--water) 60%, transparent);
-  -webkit-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 288 24' preserveAspectRatio='none'><path d='M0 16 C 24 11 48 11 72 16 S 120 21 144 16 S 192 11 216 16 S 264 21 288 16 V 24 H 0 Z' fill='white'/></svg>") repeat-x center / 288px 24px;
-  mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 288 24' preserveAspectRatio='none'><path d='M0 16 C 24 11 48 11 72 16 S 120 21 144 16 S 192 11 216 16 S 264 21 288 16 V 24 H 0 Z' fill='white'/></svg>") repeat-x center / 288px 24px;
-  animation: flood-drift-back 19s linear infinite;
-}
-
-@keyframes flood-drift {
-  from { transform: translate3d(0, 0, 0); }
-  to { transform: translate3d(240px, 0, 0); }
-}
-
-/* The other way, so the two surfaces cross rather than travel together. */
-@keyframes flood-drift-back {
-  from { transform: translate3d(0, 0, 0); }
-  to { transform: translate3d(-288px, 0, 0); }
-}
-
-/* Close to drowning. A brightening of the water the player is about to touch,
-   not a new motion vector and not a luminance flash -- the pulse is slow and
-   low amplitude, so WCAG 2.3.1 is satisfied without having to think about it. */
-.flood-warning {
-  position: absolute;
-  inset: 12px 0 auto 0;
-  height: 120px;
-  background: linear-gradient(
-    to bottom,
-    color-mix(in oklab, var(--water-foam) 34%, transparent) 0%,
-    transparent 100%
-  );
-  opacity: 0;
-  transition: opacity 400ms ease-out;
-}
-
-.flood[data-danger="true"] .flood-warning {
-  opacity: 1;
-  animation: flood-alarm 1.8s ease-in-out infinite;
-}
-
-@keyframes flood-alarm {
-  0%, 100% { opacity: 0.45; }
-  50% { opacity: 1; }
-}
-
-/* Reduced motion keeps the water and loses the drift: the level still rises,
-   because the rising level IS the gameplay, but the surface holds still. */
-@media (prefers-reduced-motion: reduce) {
-  .flood-surface,
-  .flood-swell,
-  .flood[data-danger="true"] .flood-warning {
-    animation: none;
-  }
 }
 
 /* --------------------------------------------------------------- the sky ---- */
@@ -615,21 +456,6 @@ html:has(body[data-scroll="true"]) {
   bottom: 0;
   will-change: transform;
   pointer-events: none;
-}
-
-/* ------------------------------------------------------------- caret ---- */
-
-.caret {
-  animation: caret-pulse 1.05s steps(2, jump-none) infinite;
-}
-
-@keyframes caret-pulse {
-  0%, 49% { opacity: 1; }
-  50%, 100% { opacity: 0.18; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .caret { animation: none; }
 }
 
 /* --------------------------------------------------------- the screen ---- */

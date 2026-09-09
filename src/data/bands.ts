@@ -119,8 +119,12 @@ export const BANDS: BandTheme[] = [
     ridges: ["#10362c", "#061612"],
     slab: "#050f0c",
     slabEdge: "#79f0c0",
-    word: "#e4f7ee",
-    wordDone: "#79f0c0",
+    // The typed prefix pulls further from the pending letters than the band
+    // accent did. At #79f0c0 for both, the two states were only 13.7 apart in
+    // OKLab -- a mint on a green-white, distinguishable if you looked for it
+    // and not while reading at speed. The frame keeps the accent.
+    word: "#f2faf6",
+    wordDone: "#3fe8a8",
     water: "#0f5240",
     waterFoam: "#7ff0c4",
   },

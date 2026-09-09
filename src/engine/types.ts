@@ -16,7 +16,17 @@ import type { AscentState } from "./modes/ascent";
  *    it at lint time as well.
  */
 
-export type ModeId = "ascent" | "sprint" | "zen";
+/**
+ * The game.
+ *
+ * A union of one, deliberately kept as a union rather than dissolved away.
+ * `bestKey`, the stored history and the run records all carry a mode, and
+ * keeping the type means a second mode can be added without a migration --
+ * whereas removing the field entirely would make the schema unable to say
+ * which game a stored run came from, which is what made retiring the last two
+ * modes possible at all.
+ */
+export type ModeId = "ascent";
 
 export type GamePhase =
   | "idle"
@@ -89,11 +99,8 @@ export interface GameState {
   /** Wall time spent paused, excluded from every metric. */
   pausedMs: number;
 
-  /**
-   * The climb. Only present in Ascent; the timed modes leave it null so the
-   * loop can skip the whole thing rather than iterating an empty world.
-   */
-  ascent: AscentState | null;
+  /** The climb. Always present: it is the game. */
+  ascent: AscentState;
 
   stats: Stats;
   relics: OwnedRelic[];

@@ -10,6 +10,7 @@
  * the focused element, and in those tests that was the input.
  */
 import { chromium } from "playwright";
+import { advanced, nextChar, progress } from "./lib/climb.mjs";
 
 const BASE = process.env.BASE ?? "http://localhost:3000";
 const errors = [];
@@ -26,7 +27,7 @@ const focused = () =>
     return el ? `${el.tagName}${el.className ? "." + String(el.className).split(" ")[0] : ""}` : "none";
   });
 
-const words = () =>
+const hud = () =>
   page.evaluate(
     () =>
       Array.from(document.querySelectorAll(".num"))
@@ -36,32 +37,33 @@ const words = () =>
 
 async function check(label, steal) {
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-  await page.getByRole("button", { name: "Sprint", exact: true }).click();
-  await page.waitForTimeout(700);
+  await page.waitForTimeout(1200);
 
   await steal();
   const before = await focused();
 
-  // Type the character the game is waiting for.
-  const ch = await page.evaluate(
-    () => document.querySelector(".caret")?.parentElement?.textContent ?? null,
-  );
+  // Type the letter the game is waiting for, read from the active platform
+  // rather than replayed: the point of this script is that the keystroke
+  // reaches the game at all.
+  const ch = await nextChar(page);
   if (ch === null) {
-    console.log(`  ${label}: no caret found`);
+    console.log(`  ${label}: no active platform found`);
     return false;
   }
+  const was = await progress(page);
   await page.keyboard.type(ch);
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(220);
 
   const after = await focused();
-  const typed = await page.evaluate(
-    () => document.querySelectorAll('.type-surface span[data-state="correct"]').length,
-  );
+  const now = await progress(page);
+  const landed = advanced(was, now);
 
   console.log(
-    `  ${label}: focus ${before} -> ${after}, characters registered: ${typed}`,
+    `  ${label}: focus ${before} -> ${after}, ` +
+      `"${was.word}" at ${was.typed} -> "${now.word}" at ${now.typed}: ` +
+      `${landed ? "keystroke landed" : "NOTHING REGISTERED"}`,
   );
-  return typed > 0;
+  return landed;
 }
 
 const results = [];
@@ -97,8 +99,7 @@ results.push([
 
 // 4. Recovery by clicking the board, which is what a player would try.
 await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-await page.getByRole("button", { name: "Sprint", exact: true }).click();
-await page.waitForTimeout(700);
+await page.waitForTimeout(1200);
 await page.evaluate(() => document.activeElement && document.activeElement.blur && document.activeElement.blur());
 await page.mouse.click(640, 500);
 await page.waitForTimeout(150);
@@ -106,7 +107,7 @@ const afterClick = await focused();
 console.log(`  click on the board restores focus: ${afterClick}`);
 results.push(["click restores focus", afterClick.startsWith("INPUT")]);
 
-console.log(`\nwords readout on the last run: ${JSON.stringify(await words())}`);
+console.log(`\nreadout on the last run: ${JSON.stringify(await hud())}`);
 console.log(`page errors: ${errors.length}`);
 for (const e of errors.slice(0, 5)) console.log("  !", e);
 

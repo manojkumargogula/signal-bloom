@@ -17,25 +17,28 @@
 
 ---
 
-Signal Bloom is a free, open-source browser typing game. Play a wave-based
-typing roguelite or a standard timed test, then read your net WPM, raw WPM,
-accuracy, consistency, per-key heatmap and problem bigrams. There is no
-account and no server: every run stays in your browser.
+Signal Bloom is a free, open-source browser typing game. Climb a signal array
+while a flood rises under you — there is no clock, only the water — then read
+your net WPM, raw WPM, accuracy, consistency, per-key heatmap and problem
+bigrams. There is no account and no server: every run stays in your browser.
 
-## Three ways to play
+## How you play
 
-**Ascent** — the game. A technician stands on a ledge; the platform above
-carries a word. Type it and they leap up to it, and every letter you get right
-visibly loads the jump. A flood rises from below and speeds up with every
-platform you clear, so it is the only thing that can end a run. Every twelve
-platforms the world changes colour and you salvage one of fourteen relics that
-change the rules for the rest of the climb.
+A technician stands on a ledge; the platform above carries a word. Type it and
+they leap up to it, and every letter you get right visibly loads the jump. A
+flood rises from below and speeds up with every platform you clear, so it is
+the only thing that can end a run. Every twelve platforms the world changes
+colour and you salvage one of fourteen relics that change the rules for the
+rest of the climb.
 
-**Sprint** — the honest typing test. 15, 30, 60 or 120 seconds over common
-words, advanced vocabulary, code symbols, numbers or public-domain quotes.
-Nothing chases you. This is the mode that sets your records.
+**There is no clock.** You type for as long as you can stay ahead of the water,
+which in practice is a minute and a half to three minutes — and the slower you
+type, the longer the run, because the flood accelerates per platform cleared
+rather than per second. How far up you get is what differs.
 
-**Zen** — untimed, no score, no fail state. Type until you stop.
+There used to be a timed test and an untimed practice mode alongside this one.
+They are gone: three modes meant three half-games, and the analysis is better
+served by one game that always presents a single unambiguous word.
 
 ## What it measures
 
@@ -188,8 +191,8 @@ Stated plainly, since some of them are architectural:
   result card as an image instead.
 - **The heatmap assumes QWERTY fingering.** Physical key codes are recorded for
   every keystroke, so adding a layout is a finger map rather than a rewrite.
-- **Mobile is supported, not designed for.** Sprint and Zen work on a touch
-  keyboard. Ascent expects two hands on real keys.
+- **Mobile is supported, not designed for.** The on-screen keyboard opens and
+  the game plays, but it expects two hands on real keys.
 
 ## Roadmap
 

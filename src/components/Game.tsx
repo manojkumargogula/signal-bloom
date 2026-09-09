@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { bandTheme } from "@/data/bands";
 import type { RunResult } from "@/engine/GameEngine";
 import { LOOKAHEAD } from "@/engine/modes/ascent";
-import type { EngineEvent, ModeId } from "@/engine/types";
+import type { EngineEvent } from "@/engine/types";
 import { attachInputRouter } from "@/input/router";
 import { useAutoPause, useGame } from "@/react/useEngine";
 import { useFullscreen } from "@/react/useFullscreen";
@@ -12,12 +12,12 @@ import { useMotionPrefs } from "@/react/useMotionPrefs";
 import { asset } from "@/lib/paths";
 import { readColour } from "@/render/palette";
 import { Climber } from "@/render/ascent/climber";
-import { AscentStage, WATER_LINE_OFFSET } from "@/render/ascent/stage";
+import { AscentStage } from "@/render/ascent/stage";
+import { WaterLayer } from "@/render/ascent/water";
 import { ParticleLayer } from "@/render/particles";
 import { PARTICLE_BUDGET, QualityMonitor } from "@/render/quality";
 import { Hud } from "./hud/Hud";
 import { RelicDraft } from "./RelicDraft";
-import { TypingSurface } from "./TypingSurface";
 
 /**
  * Whether the generated sky art is in the build yet.
@@ -29,11 +29,8 @@ import { TypingSurface } from "./TypingSurface";
 const HAS_SKY_ART = false;
 
 export interface GameProps {
-  mode: ModeId;
   seed: string;
   corpusId: string;
-  durationMs?: number;
-  wordCount?: number;
   onComplete?: (result: RunResult) => void;
 }
 
@@ -46,20 +43,13 @@ export interface GameProps {
  * renders about ten times a second — driven by the engine's throttled HUD
  * snapshot — rather than sixty.
  */
-export function Game({
-  mode,
-  seed,
-  corpusId,
-  durationMs,
-  wordCount,
-  onComplete,
-}: GameProps) {
+export function Game({ seed, corpusId, onComplete }: GameProps) {
   const shellRef = useRef<HTMLDivElement>(null);
   const fieldRef = useRef<HTMLDivElement>(null);
   const skyRef = useRef<HTMLDivElement>(null);
   const ridgeFarRef = useRef<HTMLDivElement>(null);
   const ridgeNearRef = useRef<HTMLDivElement>(null);
-  const floodRef = useRef<HTMLDivElement>(null);
+  const waterCanvasRef = useRef<HTMLCanvasElement>(null);
   const fxRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const announceRef = useRef<HTMLParagraphElement>(null);
@@ -70,6 +60,7 @@ export function Game({
   const stageRef = useRef<AscentStage | null>(null);
   const climberRef = useRef<Climber | null>(null);
   const particlesRef = useRef<ParticleLayer | null>(null);
+  const waterRef = useRef<WaterLayer | null>(null);
   const qualityRef = useRef(new QualityMonitor());
 
   /** Interpolated camera height, in platform spacings. */
@@ -78,7 +69,14 @@ export function Game({
   const flinchRef = useRef(0);
   /** The band whose colours are currently applied, so writes are rare. */
   const appliedBandRef = useRef(-1);
-  /** Whether the water is already in its warning state, so writes are rare. */
+  /**
+   * Whether the water is already in its warning state.
+   *
+   * The warning itself is drawn on the canvas, so this ref exists only to
+   * publish the crossing as an attribute -- written once when it changes, not
+   * every frame. Worth the two lines: it is the only handle a test has on a
+   * state that is otherwise pure pixels.
+   */
   const dangerRef = useRef(false);
   const [bandForSky, setBandForSky] = useState(1);
 
@@ -122,11 +120,9 @@ export function Game({
   }, []);
 
   const { engine, snapshot } = useGame({
-    mode,
+    mode: "ascent",
     seed,
     corpusId,
-    durationMs,
-    wordCount,
     onEvent: handleEvent,
   });
 
@@ -146,12 +142,20 @@ export function Game({
       particlesRef.current = new ParticleLayer(fxRef.current);
       particlesRef.current.resize();
     }
+    if (waterCanvasRef.current) {
+      const water = new WaterLayer(waterCanvasRef.current);
+      water.resize();
+      water.readColours();
+      waterRef.current = water;
+    }
 
     return () => {
       climber.dispose();
+      waterRef.current?.dispose();
       stageRef.current = null;
       climberRef.current = null;
       particlesRef.current = null;
+      waterRef.current = null;
     };
   }, []);
 
@@ -168,7 +172,10 @@ export function Game({
         engine.state.phase === "running" || engine.state.phase === "idle",
       handlers: {
         onChar: (char, t, code, synthetic) => engine.handleChar(char, t, code, synthetic),
-        onBackspace: (t, wordDelete) => engine.handleBackspace(t, wordDelete),
+        // A platform word is retried, not edited, so backspace does nothing
+        // here. The router still claims the key: without `preventDefault` the
+        // browser treats it as "go back" and leaves the page mid-run.
+        onBackspace: () => {},
         onPause: () => {
           const now = performance.now();
           if (engine.state.phase === "running") engine.pause(now);
@@ -185,11 +192,11 @@ export function Game({
     return detach;
   }, [engine]);
 
-  // Ascent opens itself: a climb waiting for a keystroke reads as broken
-  // rather than as ready. Sprint and Zen wait, because their clocks must not
-  // run while the player is still reading the words.
+  // The climb opens itself. A game waiting for a keystroke before anything
+  // moves reads as broken rather than as ready, and there is no clock here
+  // that starting early would spoil -- the flood holds still for the first
+  // three platforms anyway.
   useEffect(() => {
-    if (!engine.startsImmediately) return;
     const id = requestAnimationFrame(() => engine.start(performance.now()));
     return () => cancelAnimationFrame(id);
   }, [engine]);
@@ -224,7 +231,10 @@ export function Game({
       engine.advance(now, frameMs);
 
       const change = qualityRef.current.sample(frameMs);
-      if (change) particlesRef.current?.setBudget(PARTICLE_BUDGET[change]);
+      if (change) {
+        particlesRef.current?.setBudget(PARTICLE_BUDGET[change]);
+        waterRef.current?.setTier(change);
+      }
 
       const field = fieldRef.current;
       const ascent = engine.state.ascent;
@@ -283,26 +293,24 @@ export function Game({
         );
 
         // ---- the flood ---------------------------------------------------
-        const flood = floodRef.current;
-        if (flood) {
+        const water = waterRef.current;
+        if (water) {
           // The fail state, literally: the distance on screen between the
           // climber's feet and the water IS the gap. Nothing else to read.
           const clearance = ascent.gap / engine.state.stats.gapMax;
           const surface = feetY + clearance * (viewport.height - feetY);
 
-          // A transform, never a height: the water is a full-height body slid
-          // up behind the world. `height` is a layout property, and writing it
-          // every frame reflowed the whole field -- and a growing box reads as
-          // a bar chart where a rising body of water reads as water.
-          flood.style.transform =
-            `translate3d(0, ${(surface - WATER_LINE_OFFSET).toFixed(1)}px, 0)`;
-
           // The last fifth of the gap is where the run is decided, so the
-          // water says so. Written only on the crossing, not every frame.
+          // water warms and its crest thickens. A colour change, never a new
+          // animation: a flashing surface in the periphery is the one thing
+          // the motion budget will not allow.
           const danger = clearance < 0.2;
+          water.step(frameMs);
+          water.render(surface, danger);
+
           if (danger !== dangerRef.current) {
             dangerRef.current = danger;
-            flood.dataset.danger = danger ? "true" : "false";
+            waterCanvasRef.current?.setAttribute("data-danger", danger ? "true" : "false");
           }
         }
 
@@ -334,9 +342,14 @@ export function Game({
             board.style.setProperty("--slab-edge", theme.slabEdge);
             board.style.setProperty("--word", theme.word);
             board.style.setProperty("--word-done", theme.wordDone);
+          }
+          if (board) {
             board.style.setProperty("--water", theme.water);
             board.style.setProperty("--water-foam", theme.waterFoam);
           }
+          // Canvas cannot use a custom property, but it can read one. Doing so
+          // keeps the stylesheet the single source of the palette.
+          waterRef.current?.readColours();
         }
       }
 
@@ -357,9 +370,21 @@ export function Game({
     return () => cancelAnimationFrame(frame);
   }, [engine, motion.smoothing, motion.effects, motion.background, onComplete]);
 
+  // ---- reduced motion ---------------------------------------------------
+  // The water's LEVEL still rises under reduced motion, because the rising
+  // level is the gameplay rather than decoration. What stops is the travelling
+  // crest, which is the part that moves in the periphery while a word is being
+  // read.
+  useEffect(() => {
+    waterRef.current?.setMotion(motion.effects);
+  }, [motion.effects]);
+
   // ---- resize -----------------------------------------------------------
   useEffect(() => {
-    const onResize = () => particlesRef.current?.resize();
+    const onResize = () => {
+      particlesRef.current?.resize();
+      waterRef.current?.resize();
+    };
     window.addEventListener("resize", onResize);
     document.addEventListener("fullscreenchange", onResize);
     return () => {
@@ -370,7 +395,6 @@ export function Game({
 
   const phase = snapshot?.phase ?? "idle";
   const theme = bandTheme(bandForSky);
-  const isAscent = mode === "ascent";
 
   return (
     <div
@@ -379,7 +403,7 @@ export function Game({
     >
       {/* Layer 0: the sky. A plain image, so there is no shader to compile
           before first paint and nothing to fall back from. */}
-      {isAscent && (
+      {(
         <>
           <div
             aria-hidden="true"
@@ -436,30 +460,14 @@ export function Game({
           className="pointer-events-none absolute inset-0 h-full w-full"
         />
 
-        {/* The water, back to front: a pale swell behind, the mass of water
-            darkening with depth, the sheen of light just under the surface,
-            the crest line riding on top, and the warning wash that appears
-            close to drowning. Layered because the surface has to sit ON the
-            water rather than be a line drawn near it. */}
-        {isAscent && (
-          <div ref={floodRef} aria-hidden="true" className="flood z-10">
-            <div className="flood-swell" />
-            <div className="flood-body" />
-            <div className="flood-sheen" />
-            <div className="flood-surface" />
-            <div className="flood-warning" />
-          </div>
-        )}
-
-        {!isAscent && snapshot && (
-          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 px-8 sm:px-16">
-            <TypingSurface
-              targets={snapshot.targets}
-              wordIndex={snapshot.wordIndex}
-              charIndex={snapshot.charIndex}
-              typedWords={snapshot.typedWords}
-            />
-          </div>
+        {/* The water. Above the climber and the platforms on purpose: what the
+            flood has reached is submerged, which is the whole point of it. */}
+        {(
+          <canvas
+            ref={waterCanvasRef}
+            aria-hidden="true"
+            className="water pointer-events-none absolute inset-0 h-full w-full"
+          />
         )}
       </div>
 
@@ -485,12 +493,8 @@ export function Game({
 
       {phase === "idle" && (
         <Overlay
-          title={isAscent ? "The water is rising" : "Awaiting input"}
-          hint={
-            isAscent
-              ? "Type the word on the platform above to jump to it."
-              : "Start typing to open the channel."
-          }
+          title="The water is rising"
+          hint="Type the word on the platform above to jump to it."
           aside="Nothing happening? Click anywhere on the board first."
         />
       )}

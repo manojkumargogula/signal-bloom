@@ -2,9 +2,15 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { loadBests, loadHistory } from "./history";
 
 /**
- * The migration is the risky part of retiring a mode: the naive version bump
- * would have taken Sprint and Zen history with it, and that is the history
- * players actually care about because those are the modes that set records.
+ * The migration is the risky part of retiring a mode, and it has now been the
+ * risky part twice: a naive version bump would take EVERY stored run with it,
+ * including the ones from the mode that is still here. So each case below
+ * feeds a real older file and asserts that the surviving runs survive.
+ *
+ * It matters that both older versions are covered. Someone who last played
+ * before Ascent existed has a schema-1 file and someone who played during the
+ * three-mode build has a schema-2 one, and handling only the version
+ * immediately behind would be the same data loss with extra steps.
  */
 const HISTORY_KEY = "signalbloom:v1:history";
 const BESTS_KEY = "signalbloom:v1:bests";
@@ -14,7 +20,7 @@ function entry(id: string, mode: string, wpm: number) {
     id,
     mode,
     seed: "abc123",
-    corpusId: "en-common",
+    corpusId: "en-climb",
     startedAt: 1_700_000_000_000,
     layoutId: "qwerty",
     metrics: {
@@ -28,10 +34,10 @@ function entry(id: string, mode: string, wpm: number) {
   };
 }
 
-describe("history migration from schema 1", () => {
+describe("history migration", () => {
   beforeEach(() => localStorage.clear());
 
-  it("drops runs from a retired mode and keeps everything else", () => {
+  it("drops runs from every retired mode and keeps the climbs", () => {
     localStorage.setItem(
       HISTORY_KEY,
       JSON.stringify({
@@ -39,25 +45,40 @@ describe("history migration from schema 1", () => {
         runs: [
           entry("a", "onslaught", 70),
           entry("b", "sprint", 92),
-          entry("c", "zen", 84),
-          entry("d", "onslaught", 66),
+          entry("c", "ascent", 61),
+          entry("d", "zen", 84),
+          entry("e", "ascent", 74),
         ],
       }),
     );
 
     const runs = loadHistory();
-    expect(runs.map((r) => r.mode)).toEqual(["sprint", "zen"]);
+    expect(runs.map((r) => r.id)).toEqual(["c", "e"]);
+  });
+
+  it("migrates a schema 2 file, not only the oldest one", () => {
+    // The three-mode build wrote schema 2. Accepting only the version
+    // immediately behind the current one would wipe those players' climbs.
+    localStorage.setItem(
+      HISTORY_KEY,
+      JSON.stringify({
+        schema: 2,
+        runs: [entry("a", "sprint", 92), entry("b", "ascent", 58), entry("c", "zen", 40)],
+      }),
+    );
+
+    expect(loadHistory().map((r) => r.id)).toEqual(["b"]);
   });
 
   it("rewrites the file, so the migration runs once rather than every read", () => {
     localStorage.setItem(
       HISTORY_KEY,
-      JSON.stringify({ schema: 1, runs: [entry("a", "onslaught", 70), entry("b", "sprint", 92)] }),
+      JSON.stringify({ schema: 1, runs: [entry("a", "onslaught", 70), entry("b", "ascent", 92)] }),
     );
 
     loadHistory();
     const stored = JSON.parse(localStorage.getItem(HISTORY_KEY) as string);
-    expect(stored.schema).toBe(2);
+    expect(stored.schema).toBe(3);
     expect(stored.runs).toHaveLength(1);
   });
 
@@ -68,18 +89,21 @@ describe("history migration from schema 1", () => {
       BESTS_KEY,
       JSON.stringify({
         onslaught: { wpm: 70, accuracy: 95, at: 1 },
+        // Schema 2 keyed a timed mode's bests by mode AND length, so the
+        // retirement has to match on the part before the colon.
         "sprint:30000": { wpm: 92, accuracy: 97, at: 2 },
+        ascent: { wpm: 61, accuracy: 94, at: 3 },
       }),
     );
 
     loadHistory();
-    expect(Object.keys(loadBests())).toEqual(["sprint:30000"]);
+    expect(Object.keys(loadBests())).toEqual(["ascent"]);
   });
 
   it("leaves a current file alone", () => {
     localStorage.setItem(
       HISTORY_KEY,
-      JSON.stringify({ schema: 2, runs: [entry("b", "sprint", 92)] }),
+      JSON.stringify({ schema: 3, runs: [entry("b", "ascent", 92)] }),
     );
     expect(loadHistory()).toHaveLength(1);
   });
@@ -89,7 +113,7 @@ describe("history migration from schema 1", () => {
     // a shape and rendering nonsense.
     localStorage.setItem(
       HISTORY_KEY,
-      JSON.stringify({ schema: 99, runs: [entry("b", "sprint", 92)] }),
+      JSON.stringify({ schema: 99, runs: [entry("b", "ascent", 92)] }),
     );
     expect(loadHistory()).toEqual([]);
   });

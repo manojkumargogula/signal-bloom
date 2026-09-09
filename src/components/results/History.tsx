@@ -13,32 +13,29 @@ import {
  * Recent runs, with a trend.
  *
  * The point of keeping history at all is seeing whether you are getting
- * better, so the sparkline is the content and the table is the detail. Only
- * valid runs of the same mode are compared -- a 15-second Sprint and a
- * 120-second one are not the same measurement, and mixing them would produce
- * a trend line that means nothing.
+ * better, so the sparkline is the content and the table is the detail.
+ *
+ * Every valid run counts, with no filtering by length. That used to be a
+ * filter on run duration, because a 15-second test and a 120-second one are
+ * not the same measurement -- but the game is untimed now, so a run's length
+ * is a result rather than a setting, and filtering on it would compare each
+ * run only against runs that happened to end at the same moment. Which is
+ * almost none of them.
  */
 
 const MAX_SHOWN = 12;
 
-export function History({ mode, durationMs }: { mode: string; durationMs?: number }) {
+export function History({ mode }: { mode: string }) {
   const all = useSyncExternalStore(
     subscribeHistory,
     getHistorySnapshot,
     getHistoryServerSnapshot,
   );
 
-  const runs = useMemo(() => {
-    return all
-      .filter((run) => run.mode === mode && run.metrics.valid)
-      .filter((run) => {
-        if (durationMs === undefined) return true;
-        // Within a second, since the recorded duration is measured rather
-        // than nominal.
-        return Math.abs(run.metrics.durationMs - durationMs) < 1500;
-      })
-      .slice(-MAX_SHOWN);
-  }, [all, mode, durationMs]);
+  const runs = useMemo(
+    () => all.filter((run) => run.mode === mode && run.metrics.valid).slice(-MAX_SHOWN),
+    [all, mode],
+  );
 
   if (runs.length < 2) {
     return (

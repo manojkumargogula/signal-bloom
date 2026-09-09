@@ -11,8 +11,10 @@ import {
   ERROR_COST,
   FLOOD_ACCEL,
   FLOOD_BASE,
+  FLOOD_GRACE_MS,
   FLOOD_GRACE_PLATFORMS,
   GAP_MAX,
+  GAP_START,
   jumpProgress,
   lengthForBand,
   LOOKAHEAD,
@@ -287,6 +289,32 @@ describe("the flood", () => {
     const rate = FLOOD_BASE * FLOOD_ACCEL ** (60 - FLOOD_GRACE_PLATFORMS);
     expect(rate).toBeGreaterThan(0.3);
     expect(rate).toBeLessThan(0.6);
+  });
+
+  it("starts the flood on the clock when the climber stops early", () => {
+    // A run with no clock and a platform-counted grace period had a state with
+    // no exit: clear one platform, stop typing, and the flood never moves, so
+    // the run never ends. This is the bound that closes it.
+    const { state } = start(["ab"]);
+    expect(state.floodRate).toBe(0);
+
+    // Just under the bound: still still.
+    for (let i = 0; i < Math.floor((FLOOD_GRACE_MS - 500) / DT); i++) stepAscent(state, DT);
+    expect(state.floodRate).toBe(0);
+    expect(state.gap).toBe(GAP_START);
+
+    for (let i = 0; i < Math.ceil(1000 / DT); i++) stepAscent(state, DT);
+    expect(state.floodRate).toBeCloseTo(FLOOD_BASE, 6);
+    expect(state.gap).toBeLessThan(GAP_START);
+  });
+
+  it("still ends a run that never clears a single platform", () => {
+    const { state } = start(["ab"]);
+    // Long enough for the grace to expire and the opening rate to close a
+    // full gap: 12s of grace plus GAP_START / FLOOD_BASE seconds.
+    const frames = Math.ceil((FLOOD_GRACE_MS + (GAP_START / FLOOD_BASE) * 1000 + 500) / DT);
+    for (let i = 0; i < frames; i++) stepAscent(state, DT);
+    expect(state.drowned).toBe(true);
   });
 
   it("drowns the climber when the gap closes", () => {

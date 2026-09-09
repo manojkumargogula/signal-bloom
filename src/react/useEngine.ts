@@ -37,9 +37,9 @@ export interface UseGameOptions extends Omit<EngineOptions, "onEvent"> {
  * Creates the engine for a run.
  *
  * Exactly once. The run configuration is not watched here and does not need
- * to be: `AppShell` gives `<Game>` a key derived from the mode, seed, word
- * list and duration, so a configuration change remounts the component and
- * this hook builds a fresh engine on the way in. Rebuilding inside an effect
+ * to be: `AppShell` gives `<Game>` a key derived from the seed, so starting a
+ * new run remounts the component and this hook builds a fresh engine on the
+ * way in. Rebuilding inside an effect
  * instead would mean an extra render and a frame of the old run still on
  * screen.
  *
@@ -49,10 +49,10 @@ export interface UseGameOptions extends Omit<EngineOptions, "onEvent"> {
  * always after mount — so the effect is early enough.
  */
 export function useGame(options: UseGameOptions) {
-  const { mode, seed, corpusId, durationMs, wordCount, layoutId, onEvent } = options;
+  const { mode, seed, corpusId, layoutId, onEvent } = options;
 
   const [engine] = useState(
-    () => new GameEngine({ mode, seed, corpusId, durationMs, wordCount, layoutId }),
+    () => new GameEngine({ mode, seed, corpusId, layoutId }),
   );
 
   useEffect(() => {

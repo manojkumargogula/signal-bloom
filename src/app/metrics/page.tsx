@@ -181,18 +181,19 @@ consistency = 100 × (1 − tanh(cv + cv³/3 + cv⁵/5))`}</Formula>
           </p>
         </Answer>
 
-        <Answer id="which-mode" question="Which mode should I trust for a real score?">
+        <Answer id="which-mode" question="Can I trust the score from a game?">
           <p>
-            Both Sprint and Ascent report figures you can rely on, and both feed your
-            personal bests. Each presents one word at a time, so the character the game
-            expected from you is never ambiguous and every keystroke can be judged.
+            The figures are computed exactly as a conventional typing test computes them,
+            from a log of individual keystrokes. The game presents one word at a time, so
+            the character it expected from you is never ambiguous and every keystroke can
+            be judged — which is the property that makes a number trustworthy, and it is
+            why these feed your personal bests and your long-term key statistics.
           </p>
           <p>
-            Sprint is the one to use if you want a number comparable with other typing
-            tests: it is a conventional timed test over a fixed body of text, with nothing
-            chasing you. Ascent measures the same things, but under pressure from a rising
-            flood — which is a real measurement of how you type when it matters, and not
-            the same measurement as a calm one.
+            What they are not is directly comparable with a calm typing test. A rising
+            flood changes how you type: you take risks you would not take against a clock,
+            and you keep going where a test would have stopped. That is a real measurement
+            of how you type under pressure, and it is not the same measurement.
           </p>
         </Answer>
 

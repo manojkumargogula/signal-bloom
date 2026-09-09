@@ -2,17 +2,16 @@
 
 import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
-import { CORPORA } from "@/data";
+import { DEFAULT_CORPUS_ID } from "@/data";
 import { makeSeed } from "@/engine/rng";
 import type { RunResult } from "@/engine/GameEngine";
-import type { ModeId } from "@/engine/types";
 import { useIsClient } from "@/react/useIsClient";
 import { useServiceWorker } from "@/react/useServiceWorker";
 import { useTheme } from "@/react/useTheme";
 import { saveRun } from "@/storage/history";
 import { Game } from "./Game";
 import { Results } from "./results/Results";
-import { Kbd, Segmented } from "./ui/Button";
+import { Kbd } from "./ui/Button";
 import { Wordmark } from "./site/Wordmark";
 
 /**
@@ -28,29 +27,7 @@ import { Wordmark } from "./site/Wordmark";
  * its heading.
  */
 
-const MODES: readonly { value: ModeId; label: string }[] = [
-  { value: "ascent", label: "Ascent" },
-  { value: "sprint", label: "Sprint" },
-  { value: "zen", label: "Zen" },
-];
-
-const DURATIONS = [
-  { value: "15000", label: "15s" },
-  { value: "30000", label: "30s" },
-  { value: "60000", label: "60s" },
-  { value: "120000", label: "120s" },
-] as const;
-
-const MODE_HINT: Record<ModeId, string> = {
-  ascent: "Type the word on the platform above. The water is rising.",
-  sprint: "Type the words. The clock starts on your first keystroke.",
-  zen: "No timer, no score. Stop whenever you like.",
-};
-
 export function AppShell() {
-  const [mode, setMode] = useState<ModeId>("ascent");
-  const [corpusId, setCorpusId] = useState("en-common");
-  const [durationMs, setDurationMs] = useState(30_000);
   const [result, setResult] = useState<RunResult | null>(null);
   const { resolved, cycle } = useTheme();
   const { update, applyUpdate } = useServiceWorker();
@@ -74,17 +51,6 @@ export function AppShell() {
     setSeed(makeSeed());
   }, []);
 
-  const switchMode = useCallback((next: ModeId) => {
-    setResult(null);
-    setMode(next);
-    setSeed(makeSeed());
-  }, []);
-
-  const corpusOptions = CORPORA.map((corpus) => ({
-    value: corpus.id,
-    label: corpus.label.replace(/^[^·]+· /, ""),
-  }));
-
   return (
     <div ref={shellRef} className="flex h-[100dvh] flex-col overflow-hidden bg-[var(--bg)]">
       {/* -------------------------------------------------------- top bar -- */}
@@ -98,37 +64,12 @@ export function AppShell() {
               Signal Bloom — a typing game with real typing analysis
             </span>
           </h1>
-
-          <Segmented options={MODES} value={mode} onChange={switchMode} label="Game mode" />
         </div>
 
+        {/* Nothing else. There was a mode picker, a duration picker and a word
+            list picker here; with one untimed game and one word pool, every
+            one of them was a control with a single value. */}
         <div className="flex items-center gap-3">
-          {mode === "sprint" && (
-            <Segmented
-              options={DURATIONS}
-              value={String(durationMs) as (typeof DURATIONS)[number]["value"]}
-              onChange={(value) => {
-                setDurationMs(Number(value));
-                setResult(null);
-                setSeed(makeSeed());
-              }}
-              label="Test length"
-            />
-          )}
-
-          {mode !== "ascent" && (
-            <Segmented
-              options={corpusOptions}
-              value={corpusId}
-              onChange={(value) => {
-                setCorpusId(value);
-                setResult(null);
-                setSeed(makeSeed());
-              }}
-              label="Word list"
-            />
-          )}
-
           <button
             onClick={cycle}
             aria-label={`Switch to ${resolved === "dark" ? "light" : "dark"} theme`}
@@ -142,14 +83,7 @@ export function AppShell() {
       {/* ---------------------------------------------------------- board -- */}
       <div className="relative min-h-0 flex-1">
         {isClient && !result && (
-          <Game
-            key={`${mode}-${seed}-${corpusId}-${durationMs}`}
-            mode={mode}
-            seed={seed}
-            corpusId={mode === "ascent" ? "en-common" : corpusId}
-            durationMs={mode === "sprint" ? durationMs : undefined}
-            onComplete={onComplete}
-          />
+          <Game key={seed} seed={seed} corpusId={DEFAULT_CORPUS_ID} onComplete={onComplete} />
         )}
 
         {/* The results replace the game inside the same locked viewport, with
@@ -176,16 +110,16 @@ export function AppShell() {
             </button>
           </span>
         ) : (
-          <span>{result ? "Run complete." : MODE_HINT[mode]}</span>
+          <span>
+            {result
+              ? "Run complete."
+              : "Type the word on the platform above. The water is rising."}
+          </span>
         )}
 
         <div className="flex items-center gap-4">
           <span className="hidden items-center gap-1.5 sm:flex">
             <Kbd>Esc</Kbd> pause
-          </span>
-          <span className="hidden items-center gap-1.5 sm:flex">
-            <Kbd>Ctrl</Kbd>
-            <Kbd>⌫</Kbd> clear word
           </span>
           <Link
             href="/metrics/"

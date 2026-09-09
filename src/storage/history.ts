@@ -21,7 +21,7 @@ import type { RunResult } from "@/engine/GameEngine";
 const PREFIX = "signalbloom:v1";
 const HISTORY_KEY = `${PREFIX}:history`;
 const BESTS_KEY = `${PREFIX}:bests`;
-const SCHEMA = 2;
+const SCHEMA = 3;
 
 /** History entries drop the keystroke log: it is large and rarely re-read. */
 export type HistoryEntry = Omit<RunResult, "metrics"> & {
@@ -61,20 +61,24 @@ function write(key: string, value: unknown): boolean {
 /**
  * Modes that no longer exist.
  *
- * An Ascent score is height and an Onslaught score was waves cleared, so
- * carrying them into one trend line would put two incomparable numbers side
- * by side. They are dropped rather than relabelled.
+ * Every one of them scored something incomparable with a climb: Onslaught
+ * counted waves cleared, Sprint measured a fixed number of seconds, Zen kept
+ * no score at all. Putting any of them in one trend line beside a height
+ * would be a chart of two different quantities, so they are dropped rather
+ * than relabelled.
  */
-const RETIRED_MODES = new Set(["onslaught"]);
+const RETIRED_MODES = new Set(["onslaught", "sprint", "zen"]);
 
 /**
  * Reads the history, migrating an older file in place.
  *
- * The version bump could NOT be a bare bump. `loadHistory` returns nothing on
- * a schema mismatch, so raising SCHEMA from 1 to 2 on its own would have
- * silently destroyed Sprint and Zen history along with the Onslaught runs --
- * and Sprint and Zen are the modes that set records, so that is the history
- * that actually matters. Hence a real migration.
+ * Neither version bump could be a bare bump. `loadHistory` returns nothing on
+ * a schema mismatch, so raising the number on its own would silently destroy
+ * every run in the file rather than only the retired ones -- which is exactly
+ * the history a player cares about. Hence a real migration, and hence it
+ * accepts EVERY older version rather than only the one immediately behind:
+ * someone who last played before Ascent existed has a schema-1 file, and
+ * skipping them would be the same data loss with extra steps.
  */
 export function loadHistory(): HistoryEntry[] {
   const file = read<HistoryFile>(HISTORY_KEY, { schema: SCHEMA, runs: [] });
@@ -82,12 +86,14 @@ export function loadHistory(): HistoryEntry[] {
 
   if (file.schema === SCHEMA) return file.runs;
 
-  if (file.schema === 1) {
+  if (file.schema >= 1 && file.schema < SCHEMA) {
     const kept = file.runs.filter((run) => !RETIRED_MODES.has(run.mode));
     write(HISTORY_KEY, { schema: SCHEMA, runs: kept });
 
     // The bests map is keyed by mode, so it needs the same treatment or a
-    // retired mode keeps a record nothing can ever match.
+    // retired mode keeps a record nothing can ever match. Schema 2 keyed a
+    // timed mode's bests as `sprint:30000`, so the mode is the part before
+    // the colon.
     const bests = read<Bests>(BESTS_KEY, {});
     const keptBests = Object.fromEntries(
       Object.entries(bests).filter(([key]) => !RETIRED_MODES.has(key.split(":")[0])),
@@ -137,9 +143,18 @@ export interface Best {
 
 export type Bests = Record<string, Best>;
 
-/** Personal bests are keyed by mode and configuration, never mixed. */
-export function bestKey(result: Pick<RunResult, "mode"> & { durationMs?: number }): string {
-  return result.durationMs ? `${result.mode}:${result.durationMs}` : result.mode;
+/**
+ * Personal bests are keyed by mode.
+ *
+ * By mode ALONE, now that the game is untimed. The key used to carry the run
+ * length, so a 15-second test and a 120-second one could not shadow each
+ * other -- and with a mode whose runs are whatever length the flood allows,
+ * that made every single run its own bucket with nothing to compare against,
+ * so a personal best was both always set and never beaten. A climb is
+ * comparable with any other climb; length is a result, not a setting.
+ */
+export function bestKey(result: Pick<RunResult, "mode">): string {
+  return result.mode;
 }
 
 export function loadBests(): Bests {
@@ -148,7 +163,7 @@ export function loadBests(): Bests {
 
 function updateBest(result: RunResult): void {
   const bests = loadBests();
-  const key = bestKey({ mode: result.mode, durationMs: result.metrics.durationMs });
+  const key = bestKey({ mode: result.mode });
   const current = bests[key];
   if (!current || result.metrics.wpm > current.wpm) {
     bests[key] = {
@@ -164,7 +179,7 @@ function updateBest(result: RunResult): void {
 export function isPersonalBest(result: RunResult): boolean {
   if (!result.metrics.valid) return false;
   const bests = loadBests();
-  const key = bestKey({ mode: result.mode, durationMs: result.metrics.durationMs });
+  const key = bestKey({ mode: result.mode });
   const best = bests[key];
   // Saving happens before the results screen renders, so the run's own entry
   // is already in place; equality means this run set it.

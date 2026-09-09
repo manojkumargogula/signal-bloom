@@ -1,18 +1,17 @@
 # Signal Bloom
 
 > Signal Bloom is a free, open-source browser typing game that measures how you
-> actually type. It combines a wave-based typing roguelite with a standard timed
-> typing test and reports net WPM, raw WPM, accuracy and consistency for every
-> run, plus a per-second speed chart, a per-key error heatmap, a per-finger
-> breakdown and the letter pairs costing you the most time. There is no account
-> and no server: all run history is stored in the browser's localStorage. MIT
-> licensed. Source: https://github.com/manojkumargogula/signal-bloom
+> actually type. It is one untimed game -- a vertical typing platformer where a
+> rising flood is the only thing that can end a run -- and it reports net WPM,
+> raw WPM, accuracy and consistency for every run, plus a per-second speed
+> chart, a per-key error heatmap, a per-finger breakdown and the letter pairs
+> costing you the most time. There is no account and no server: all run history
+> is stored in the browser's localStorage. MIT licensed.
+> Source: https://github.com/manojkumargogula/signal-bloom
 
-## Modes
+## The game
 
-- [Ascent](https://manojkumargogula.github.io/signal-bloom/): A vertical typing platformer. A climber stands on a ledge and the platform above carries a word; typing it launches a leap up to that platform, and each correct letter visibly loads the jump. A flood rises from below and accelerates with every platform cleared, which is the only way a run can end. Every twelve platforms the world changes colour and the player picks one of three relics.
-- Sprint: Fixed-duration typing test at 15, 30, 60 or 120 seconds over common English words, advanced vocabulary, programming symbols, numbers or public-domain quotations. This is the mode that sets personal bests, because every keystroke has one unambiguous expected character.
-- Zen: Untimed practice with no score and no fail state.
+- [Ascent](https://manojkumargogula.github.io/signal-bloom/): A vertical typing platformer, and the only mode. A climber stands on a ledge and the platform above carries a word; typing it launches a leap up to that platform, and each correct letter visibly loads the jump. There is no clock: a flood rises from below and accelerates with every platform cleared, and reaching the climber is the only way a run can end, so a run lasts as long as the player keeps ahead of it. Every twelve platforms the world changes colour and the player picks one of three relics. It sets personal bests and feeds long-term key statistics, because presenting one word at a time means the character expected from the player is never ambiguous.
 
 ## Metrics
 

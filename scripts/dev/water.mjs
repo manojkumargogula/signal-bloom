@@ -11,13 +11,15 @@
  *
  * What it checks:
  *
- * 1. the water is built out of the layers it is supposed to be, with the
- *    masks and the drifts actually applied by the browser;
- * 2. the level is driven by a TRANSFORM, not by height -- a height write
- *    reflows the whole field every frame;
- * 3. the level rises monotonically once the grace platforms are cleared;
- * 4. the warning state arrives before the run ends;
- * 5. and it paints every band's palette at the same waterline, because
+ * 1. the surface undulates rather than being a straight line, read off the
+ *    pixels the browser painted;
+ * 2. its crest is lit against the water below it, which is the cue that makes
+ *    a coloured area read as wet;
+ * 3. the wave trains move INDEPENDENTLY -- a rigid translation is the exact
+ *    failure the canvas replaced, and it would pass a naive "did it move";
+ * 4. the level rises once the grace platforms are cleared;
+ * 5. the warning state arrives before the run ends;
+ * 6. and it paints every band's palette at the same waterline, because
  *    otherwise band five costs sixty platforms to look at.
  */
 import { readFileSync } from "node:fs";
@@ -66,50 +68,73 @@ page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
 await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
 await page.waitForTimeout(1400);
 
-// ---- the layers exist and the browser applied them ---------------------
-const layers = await page.evaluate(() => {
-  const flood = document.querySelector(".flood");
-  if (!flood) return null;
-  const read = (selector) => {
-    const el = flood.querySelector(selector);
-    if (!el) return null;
-    const style = getComputedStyle(el);
-    return {
-      masked: (style.maskImage || style.webkitMaskImage || "none") !== "none",
-      drifting: style.animationName !== "none" && parseFloat(style.animationDuration) > 0,
-      foam: style.filter.includes("drop-shadow"),
-    };
-  };
-  return {
-    fillsField:
-      Math.abs(flood.getBoundingClientRect().height -
-        flood.parentElement.getBoundingClientRect().height) < 2,
-    clipped: getComputedStyle(flood.parentElement).overflow === "hidden",
-    inlineHeight: flood.style.height,
-    swell: read(".flood-swell"),
-    body: read(".flood-body"),
-    sheen: read(".flood-sheen"),
-    surface: read(".flood-surface"),
-    warning: read(".flood-warning"),
-  };
-});
+// ---- the water is a drawn surface, not a flat fill ---------------------
+// Everything here is read off the pixels the browser actually painted. The
+// water moved from five masked divs to a canvas precisely because a shape
+// translating at a constant speed is a conveyor belt rather than a liquid, so
+// what has to be asserted is that the surface UNDULATES and that its crest is
+// lit -- neither of which any DOM assertion can see.
+function probe(page) {
+  return page.evaluate(() => {
+    const canvas = document.querySelector("canvas.water");
+    if (!canvas) return null;
+    const ctx = canvas.getContext("2d");
+    const scale = canvas.width / canvas.clientWidth;
+    const columns = [];
+    // Twenty columns across the width, which spans several wavelengths of
+    // even the longest wave train.
+    for (let i = 1; i <= 20; i++) {
+      const x = Math.floor((canvas.width * i) / 21);
+      const strip = ctx.getImageData(x, 0, 1, canvas.height).data;
+      let top = null;
+      for (let y = 0; y < canvas.height; y++) {
+        if (strip[y * 4 + 3] > 24) {
+          top = y;
+          break;
+        }
+      }
+      if (top === null) {
+        columns.push(null);
+        continue;
+      }
+      const at = (y) => {
+        const o = Math.min(canvas.height - 1, y) * 4;
+        return 0.2126 * strip[o] + 0.7152 * strip[o + 1] + 0.0722 * strip[o + 2];
+      };
+      columns.push({
+        surface: top / scale,
+        crest: at(top + 1),
+        // Well below the crest and below the sheen band, so this is the body.
+        deep: at(top + Math.round(70 * scale)),
+      });
+    }
+    return { width: canvas.width, height: canvas.height, columns };
+  });
+}
 
-if (!layers) {
-  problems.push("no .flood in the field at all");
-} else {
-  const expect = (ok, what) => {
-    console.log(`  ${ok ? "ok  " : "FAIL"} ${what}`);
-    if (!ok) problems.push(what);
-  };
-  expect(layers.fillsField, "the water is a full-height body, not a growing box");
-  expect(layers.clipped, "the field clips it, so it cannot paint over the status bar");
-  expect(layers.inlineHeight === "", "the level is never written as an inline height");
-  expect(Boolean(layers.swell?.masked && layers.swell.drifting), "the swell is masked and drifts");
-  expect(Boolean(layers.surface?.masked && layers.surface.drifting), "the crest is masked and drifts");
-  expect(Boolean(layers.surface?.foam), "the crest carries its foam as a mask-following shadow");
-  expect(Boolean(layers.sheen), "the surface has its sheen band");
-  expect(Boolean(layers.warning), "the warning wash is present");
-  expect(layers.swell?.drifting !== undefined, "the swell exists");
+const expect = (ok, what) => {
+  console.log(`  ${ok ? "ok  " : "FAIL"} ${what}`);
+  if (!ok) problems.push(what);
+};
+
+{
+  const first = await probe(page);
+  if (!first) {
+    problems.push("no water canvas in the field at all");
+  } else {
+    expect(first.width > 0 && first.height > 0, "the water canvas is sized to the field");
+    const found = first.columns.filter(Boolean);
+    expect(found.length === first.columns.length, "the water spans the full width");
+
+    const tops = found.map((c) => c.surface);
+    const spread = Math.max(...tops) - Math.min(...tops);
+    console.log(`       surface varies by ${spread.toFixed(1)}px across the width`);
+    expect(spread > 3, "the surface undulates rather than being a straight line");
+
+    const lit = found.filter((c) => c.crest > c.deep + 8).length;
+    console.log(`       crest brighter than the body in ${lit}/${found.length} columns`);
+    expect(lit > found.length * 0.6, "the crest is lit against the water below it");
+  }
 }
 
 // ---- clear the grace platforms so the flood starts moving --------------
@@ -129,14 +154,26 @@ for (let i = 0; i < 4; i++) {
   await page.waitForTimeout(320);
 }
 
-/** The waterline, read off the transform the loop wrote. */
-const level = () =>
-  page.evaluate(() => {
-    const flood = document.querySelector(".flood");
-    if (!flood) return null;
-    const m = /translate3d\(0px,\s*([-\d.]+)px/.exec(flood.style.transform);
-    return { y: m ? Number(m[1]) : null, danger: flood.dataset.danger === "true" };
-  });
+/**
+ * The waterline.
+ *
+ * Averaged across the probe's columns rather than read from a style, because
+ * the level is no longer a transform on a box -- it is where the canvas drew
+ * the surface, and the waves mean any single column is a few pixels off.
+ */
+async function level(page) {
+  const now = await probe(page);
+  if (!now) return null;
+  const found = now.columns.filter(Boolean);
+  if (found.length === 0) return null;
+  const danger = await page.evaluate(
+    () => document.querySelector("canvas.water")?.dataset.danger === "true",
+  );
+  return {
+    y: found.reduce((sum, c) => sum + c.surface, 0) / found.length,
+    danger,
+  };
+}
 
 // ---- the band palettes, all at one waterline ---------------------------
 await page.waitForTimeout(6000);
@@ -160,10 +197,32 @@ for (const band of bands()) {
     const ridges = document.querySelectorAll(".ridge");
     if (ridges[0]) ridges[0].style.background = b.ridge0;
     if (ridges[1]) ridges[1].style.background = b.ridge1;
+    // The canvas reads `--water` on a band change or a resize, and this is
+    // neither, so nudge it.
+    window.dispatchEvent(new Event("resize"));
   }, band);
   await page.waitForTimeout(400);
   await page.screenshot({ path: `${OUT}/water-${band.id}.png` });
   console.log(`  shot: water-${band.id}.png`);
+}
+
+// ---- the surface moves through itself ----------------------------------
+// Two probes a beat apart at a moment when the LEVEL is barely changing. The
+// old CSS version would pass a "did the pattern move" check too, so what is
+// checked is that the columns did not all move by the SAME amount: a rigid
+// translation is the failure mode being ruled out.
+{
+  const a = await probe(page);
+  await page.waitForTimeout(700);
+  const b = await probe(page);
+  if (a && b) {
+    const deltas = a.columns
+      .map((c, i) => (c && b.columns[i] ? b.columns[i].surface - c.surface : null))
+      .filter((d) => d !== null);
+    const spread = Math.max(...deltas) - Math.min(...deltas);
+    console.log(`       columns moved over a range of ${spread.toFixed(1)}px`);
+    expect(spread > 1.5, "the wave trains move independently, not as one rigid shape");
+  }
 }
 
 // ---- it rises, and it warns before it kills ----------------------------
@@ -171,10 +230,12 @@ let previous = Infinity;
 let rose = 0;
 let warned = false;
 for (let i = 0; i < 20; i++) {
-  const now = await level();
+  const now = await level(page);
   if (!now) break;
-  if (now.y !== null && now.y < previous - 0.5) rose++;
-  if (now.y !== null) previous = now.y;
+  // Two pixels, not half of one: the waves alone move a column by several,
+  // so a smaller threshold would count swell as a rising level.
+  if (now.y < previous - 2) rose++;
+  previous = now.y;
   if (now.danger && !warned) {
     warned = true;
     await page.screenshot({ path: `${OUT}/water-danger.png` });

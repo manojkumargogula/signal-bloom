@@ -21,7 +21,7 @@ export const CONTENT_ROUTES: ContentRoute[] = [
     path: "/",
     title: "Signal Bloom — a typing game with real typing analysis",
     summary:
-      "The game itself. Three modes: a wave-based typing roguelite, a timed typing test, and untimed practice.",
+      "The game itself: an untimed vertical typing platformer where a rising flood is the only thing that can end a run.",
     source: "src/app/page.tsx",
   },
   {

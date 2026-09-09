@@ -30,6 +30,49 @@ function luminance(hex) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+/**
+ * Perceptual distance in OKLab, scaled by 100.
+ *
+ * A WCAG contrast ratio measures LUMINANCE only, which is the wrong
+ * instrument for one pair here. The typed prefix of a word differs from the
+ * letters still to come by hue and chroma -- an off-white going to the band's
+ * saturated accent -- and that reads instantly at a luminance ratio of 1.3:1,
+ * which the ratio would call a failure. So that pair is judged on perceptual
+ * distance, and everything that genuinely is a text-on-background pair keeps
+ * the ratio.
+ */
+function channels(hex) {
+  let value = hex.replace("#", "").trim();
+  if (value.length === 3) value = value.split("").map((c) => c + c).join("");
+  return [
+    parseInt(value.slice(0, 2), 16) / 255,
+    parseInt(value.slice(2, 4), 16) / 255,
+    parseInt(value.slice(4, 6), 16) / 255,
+  ];
+}
+
+function toLinear(c) {
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+function deltaE(a, b) {
+  const [l1, m1, s1] = oklab(a);
+  const [l2, m2, s2] = oklab(b);
+  return Math.hypot(l1 - l2, m1 - m2, s1 - s2) * 100;
+}
+
+function oklab(hex) {
+  const [r, g, b] = channels(hex).map(toLinear);
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  ];
+}
+
 function ratio(a, b) {
   const [x, y] = [luminance(a), luminance(b)].sort((m, n) => n - m);
   return (x + 0.05) / (y + 0.05);
@@ -50,9 +93,6 @@ const PAIRS = [
   ["amber-dim", "bg", 4.5, "de-emphasised accent text"],
   ["fault", "bg", 4.5, "error text"],
   ["fault", "bg-panel", 4.5, "error text in panels"],
-  ["type-pending", "bg", 4.5, "upcoming text in the typing surface"],
-  ["type-done", "bg", 4.5, "decoded text in the typing surface"],
-  ["type-error", "bg", 4.5, "mistyped text"],
   ["line-strong", "bg", 3.0, "visible borders"],
   // Chart marks need 3:1 against the surface they are drawn on, not 4.5:1 --
   // they are graphics, not text, and each is also directly labelled.
@@ -83,16 +123,11 @@ for (const [name, vars] of THEMES) {
   }
 }
 
-// The pending/done emphasis gap is what makes a typing surface readable at a
-// glance. If they are too close, the player cannot see where they are.
-for (const [name, vars] of THEMES) {
-  const gap = ratio(vars["type-done"], vars["type-pending"]);
-  const ok = gap >= 2.0;
-  if (!ok) failed++;
-  console.log(
-    `\n  ${name}: pending -> done emphasis gap ${gap.toFixed(2)}:1 ${ok ? "ok" : "FAIL (need 2.0)"}`,
-  );
-}
+// The pending/done emphasis gap is what makes a word readable at a glance: if
+// the typed prefix and the letters still to come are too close, the player
+// cannot see where they are in the word. It lives per band now rather than in
+// one global pair, because the words are set on the band's slab -- so the
+// check is in the per-band block below, against `word` and `wordDone`.
 
 // Every custom property a component references must actually be defined.
 //
@@ -226,6 +261,18 @@ for (const [name, vars] of THEMES) {
           `    ${ok ? "ok" : "FAIL"}  ${r.toFixed(2)}:1  (need ${min})  ${id} — ${use}`,
         );
       }
+
+      // Where you are in the word, made visible. The typed prefix is
+      // distinguished by hue rather than by lightness, so this is a
+      // perceptual distance and not a contrast ratio -- 15 is the floor at
+      // which a full-colour reader can separate two marks at a glance.
+      const emphasis = deltaE(done, word);
+      const emphasisOk = emphasis >= 15;
+      if (!emphasisOk) failed++;
+      console.log(
+        `    ${emphasisOk ? "ok" : "FAIL"}  ΔE ${emphasis.toFixed(1)}  (need 15)  ` +
+          `${id} — typed prefix against the letters to come`,
+      );
     }
   }
 }

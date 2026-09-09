@@ -58,13 +58,6 @@ export interface HudSnapshot {
   readonly relicIds: readonly string[];
   readonly draft: readonly string[] | null;
 
-  // ---- Sprint and Zen --------------------------------------------------
-  readonly targets: readonly string[];
-  readonly wordIndex: number;
-  readonly charIndex: number;
-  readonly typedWords: readonly (readonly string[])[];
-  readonly timeLeftMs: number | null;
-
   readonly rev: number;
 }
 
@@ -91,21 +84,6 @@ export interface EngineOptions extends RunConfig {
 }
 
 const HUD_INTERVAL_MS = 100;
-
-const EMPTY_PLATFORMS: readonly Platform[] = [];
-
-/**
- * How much recent typing Zen's live speed is measured over. Long enough to
- * read steadily, short enough to reflect what the player is doing now.
- */
-const ZEN_WINDOW_MS = 30_000;
-
-/**
- * Gaps longer than this are thinking, not typing, and are excluded from the
- * live rate. Matches the outlier threshold the analytics layer uses for
- * per-key latency, so the two agree about what counts as a keystroke.
- */
-const LIVE_GAP_LIMIT_MS = 1500;
 
 export class GameEngine {
   readonly state: GameState;
@@ -137,8 +115,6 @@ export class GameEngine {
   private lastCombo = 0;
   private lastShields = 0;
   /** Sprint and Zen word counters, for the readout. */
-  private wordsDone = 0;
-  private perfectWords = 0;
   private invalidReasons = new Set<string>();
 
   constructor(options: EngineOptions) {
@@ -153,49 +129,24 @@ export class GameEngine {
     this.wpmUnit = corpus.wpmUnit;
 
     refreshStats(this.state, this.runtime);
-    if (this.state.ascent) {
-      this.state.ascent.shields = this.state.stats.maxShields;
-      refill(this.state.ascent, this.ascentCtx());
-    }
+    this.state.ascent.shields = this.state.stats.maxShields;
+    refill(this.state.ascent, this.ascentCtx());
 
-    const targets = this.buildTargets();
-    this.recorder = new KeystrokeRecorder(targets, 0);
-    this.targets = targets;
+    this.recorder = new KeystrokeRecorder([], 0);
+    this.targets = [];
     this.snapshot = this.buildSnapshot();
   }
 
-  private targets: string[];
-
   /**
-   * Builds the target text for the timed modes.
+   * The target text, one entry per platform.
    *
-   * Each word carries its own trailing space, which makes the separator a
-   * normally scored character instead of a special case threaded through
-   * every formula.
+   * Grown by the climb rather than built up front: the words above the
+   * climber are chosen a couple of platforms ahead, so there is no fixed list
+   * to build when a run starts. It begins empty and is extended as platforms
+   * are drawn, which is also why the platform index maps straight onto it and
+   * the analytics need no padding.
    */
-  private buildTargets(): string[] {
-    // Ascent builds its targets as it climbs, one per platform, so there is
-    // no fixed list up front.
-    if (this.state.mode === "ascent") return [];
-
-    const corpus = getCorpus(this.config.corpusId);
-
-    if (corpus.kind === "quotes" && corpus.quotes?.length) {
-      const quote = this.ctx.rngWords.pick(corpus.quotes);
-      const words = quote.text.split(" ");
-      return words.map((w, i) => (i === words.length - 1 ? w : `${w} `));
-    }
-
-    // A duration-based run needs enough words that a fast typist cannot run
-    // out; 220 WPM for two minutes is comfortably over any real result.
-    const need =
-      this.config.wordCount ??
-      Math.max(60, Math.ceil(((this.config.durationMs ?? 30_000) / 60_000) * 220));
-
-    const words: string[] = [];
-    for (let i = 0; i < need; i++) words.push(this.ctx.drawWord(9, i + 3, 0));
-    return words.map((w, i) => (i === need - 1 ? w : `${w} `));
-  }
+  private targets: string[];
 
   // ---- subscription -----------------------------------------------------
 
@@ -213,58 +164,32 @@ export class GameEngine {
   private buildSnapshot(): HudSnapshot {
     const s = this.state;
     const metrics = this.liveMetrics();
-    // One pass over the log rebuilds what was typed in every word. At 10Hz
-    // over a few thousand keystrokes this is far cheaper than the alternative
-    // of keeping a parallel mutable copy in sync with the recorder.
-    const typedWords: string[][] = [];
-    for (const k of this.recorder.log) {
-      let word = typedWords[k.wordIndex];
-      if (!word) {
-        word = [];
-        typedWords[k.wordIndex] = word;
-      }
-      if (k.kind === "insert") {
-        word.length = k.charIndex;
-        word[k.charIndex] = k.actual;
-      } else if (k.kind === "backspace") {
-        word.length = Math.max(0, word.length - 1);
-      } else {
-        word.length = 0;
-      }
-    }
-
     const ascent = s.ascent;
 
     return {
       phase: s.phase,
       mode: s.mode,
 
-      height: ascent?.height ?? 0,
-      band: ascent?.band ?? 1,
-      bandName: bandTheme(ascent?.band ?? 1).name,
-      bandProgress: (ascent?.height ?? 0) % PLATFORMS_PER_BAND,
-      shields: ascent?.shields ?? 0,
+      height: ascent.height,
+      band: ascent.band,
+      bandName: bandTheme(ascent.band).name,
+      bandProgress: ascent.height % PLATFORMS_PER_BAND,
+      shields: ascent.shields,
       maxShields: s.stats.maxShields,
-      gap: ascent ? ascent.gap / s.stats.gapMax : 1,
-      combo: ascent?.combo ?? 0,
-      comboBest: ascent?.comboBest ?? 0,
-      score: ascent?.score ?? 0,
-      charge: ascent?.charge ?? 0,
-      climberPhase: ascent?.phase ?? "grounded",
-      jump: ascent ? jumpProgress(ascent) : 1,
-      platforms: ascent?.visible ?? EMPTY_PLATFORMS,
+      gap: ascent.gap / s.stats.gapMax,
+      combo: ascent.combo,
+      comboBest: ascent.comboBest,
+      score: ascent.score,
+      charge: ascent.charge,
+      climberPhase: ascent.phase,
+      jump: jumpProgress(ascent),
+      platforms: ascent.visible,
       hintChar: this.hintChar,
 
       wpm: metrics.wpm,
       accuracy: metrics.accuracy,
       relicIds: s.relics.map((r) => r.id),
       draft: s.draft,
-
-      targets: this.targets,
-      wordIndex: this.recorder.wordIndex,
-      charIndex: this.recorder.charIndex,
-      typedWords,
-      timeLeftMs: this.timeLeftMs(),
 
       rev: this.rev,
     };
@@ -277,20 +202,15 @@ export class GameEngine {
    * to run once, at the end. Running it ten times a second would put an O(n)
    * pass on the critical path of a game loop.
    *
-   * Zen reports the rate at which the player is TYPING, not the rate averaged
-   * over the session. Two things were tried before this and both were wrong.
-   * A cumulative average decays toward zero the moment someone stops to
-   * think, which in an untimed mode punishes exactly the pausing the mode
-   * exists to allow. A trailing wall-clock window has the same failure for
-   * the same reason -- after two minutes of thinking, the last thirty seconds
-   * contain nothing.
-   *
-   * So Zen sums the intervals between recent keystrokes and drops any gap
-   * longer than the analytics layer's outlier threshold, which is the same
-   * convention used for per-key latency. A pause makes the figure older, not
-   * smaller, and the readout holds the speed the player was actually typing
-   * at. The timed modes stay cumulative, because there the average over the
-   * whole run IS the result and idle time genuinely costs you.
+   * The figure is cumulative over the run, which is right for this game even
+   * though the game is untimed. An untimed PRACTICE mode needs a trailing
+   * typing rate instead, because a cumulative average decays toward zero the
+   * moment someone stops to think, and that punishes exactly the pausing such
+   * a mode exists to allow -- a trailing wall-clock window fails the same way,
+   * since after two minutes of thinking the last thirty seconds are empty.
+   * Here there is no such pausing to protect: the flood rises the whole time,
+   * so idle seconds genuinely cost you and the average over the run is the
+   * honest number.
    */
   private liveMetrics(): { wpm: number; accuracy: number } {
     const elapsed = this.elapsedMs();
@@ -316,40 +236,7 @@ export class GameEngine {
 
     const accuracy = firstPresses === 0 ? 100 : (firstCorrect / firstPresses) * 100;
 
-    if (this.state.mode !== "zen") {
-      const wpm = correct / charsPerWord / (elapsed / 60_000);
-      return { wpm: Number.isFinite(wpm) ? wpm : 0, accuracy };
-    }
-
-    // Walk backwards over recent keystrokes, summing only the intervals that
-    // represent typing rather than thinking, until enough of them to be
-    // steady have been counted.
-    let countedMs = 0;
-    let countedChars = 0;
-    let next: number | null = null;
-
-    for (let i = log.length - 1; i >= 0 && countedMs < ZEN_WINDOW_MS; i--) {
-      const k = log[i];
-      if (k.kind !== "insert") continue;
-
-      if (next !== null) {
-        const gap = next - k.tActive;
-        if (gap > 0 && gap <= LIVE_GAP_LIMIT_MS) {
-          countedMs += gap;
-          if (k.correct) countedChars++;
-        }
-      }
-      next = k.tActive;
-    }
-
-    // Under a second of counted typing says nothing yet; fall back to the
-    // session average rather than extrapolating from two keystrokes.
-    if (countedMs < 1000) {
-      const wpm = correct / charsPerWord / (elapsed / 60_000);
-      return { wpm: Number.isFinite(wpm) ? wpm : 0, accuracy };
-    }
-
-    const wpm = countedChars / charsPerWord / (countedMs / 60_000);
+    const wpm = correct / charsPerWord / (elapsed / 60_000);
     return { wpm: Number.isFinite(wpm) ? wpm : 0, accuracy };
   }
 
@@ -362,18 +249,9 @@ export class GameEngine {
   /** Last timestamp the loop saw; avoids calling performance.now() here. */
   private nowRef = 0;
 
-  timeLeftMs(): number | null {
-    if (this.state.mode !== "sprint" || !this.config.durationMs) return null;
-    if (this.startedAtPerf === null) return this.config.durationMs;
-    return Math.max(0, this.config.durationMs - this.elapsedMs());
-  }
 
   // ---- lifecycle --------------------------------------------------------
 
-  /** True when the mode should begin without waiting for a keystroke. */
-  get startsImmediately(): boolean {
-    return this.state.mode === "ascent";
-  }
 
   start(now: number): void {
     if (this.state.phase === "running") return;
@@ -382,7 +260,7 @@ export class GameEngine {
     this.startedAtPerf = now;
     this.nowRef = now;
     this.recorder.start(now);
-    this.emit({ type: "bandStart", band: this.state.ascent?.band ?? 1 });
+    this.emit({ type: "bandStart", band: this.state.ascent.band });
     this.publish(true);
   }
 
@@ -414,8 +292,8 @@ export class GameEngine {
     this.state.phase = "over";
     this.emit({
       type: "gameOver",
-      score: this.state.ascent?.score ?? 0,
-      height: this.state.ascent?.height ?? 0,
+      score: this.state.ascent.score,
+      height: this.state.ascent.height,
     });
     this.publish(true);
   }
@@ -474,14 +352,6 @@ export class GameEngine {
       if (steps === MAX_STEPS) this.accumulator = 0;
     }
 
-    // Sprint ends on its own clock, independent of the simulation.
-    if (this.state.mode === "sprint" && this.config.durationMs) {
-      if (this.startedAtPerf !== null && this.elapsedMs() >= this.config.durationMs) {
-        this.finish(now);
-        return 0;
-      }
-    }
-
     this.hudAccumulator += dt;
     if (this.hudAccumulator >= HUD_INTERVAL_MS) {
       this.hudAccumulator = 0;
@@ -519,46 +389,8 @@ export class GameEngine {
     if (this.state.phase !== "running") return;
     this.nowRef = now;
 
-    if (this.state.mode === "ascent") {
-      this.handleAscentChar(char, now, code, synthetic);
-    } else {
-      this.handleTextChar(char, now, code, synthetic);
-    }
+    this.handleAscentChar(char, now, code, synthetic);
     this.publish(true);
-  }
-
-  private handleTextChar(char: string, now: number, code: string | null, synthetic: boolean): void {
-    const before = this.recorder.wordIndex;
-    const event = this.recorder.insert(char, { t: now, code, synthetic });
-
-    if (!event.correct) {
-      this.wordDirty = true;
-      this.emit({
-        type: "mistype",
-        expected: event.expected ?? "",
-        actual: char,
-        charged: false,
-        hint: false,
-      });
-    }
-    this.emit({ type: "keystroke", correct: event.correct });
-
-    if (this.recorder.wordIndex !== before) {
-      this.wordsDone++;
-      if (!this.wordDirty) this.perfectWords++;
-      this.wordDirty = false;
-    }
-
-    // A word-count run finishes when the last target is complete. The final
-    // target has no trailing space, so the recorder never advances past it --
-    // completion has to be detected from the cursor reaching its end.
-    if (this.config.wordCount) {
-      const lastIndex = this.targets.length - 1;
-      const onLast = this.recorder.wordIndex === lastIndex;
-      const finishedLast =
-        onLast && this.recorder.charIndex >= (this.targets[lastIndex]?.length ?? 0);
-      if (this.recorder.wordIndex > lastIndex || finishedLast) this.finish(now);
-    }
   }
 
   /**
@@ -678,43 +510,11 @@ export class GameEngine {
     };
   }
 
-  handleBackspace(now: number, wordDelete = false): void {
-    if (this.state.phase !== "running") return;
-    if (this.state.mode === "ascent") return; // a platform word is retried, not edited
-    this.nowRef = now;
-
-    const target = this.targets[this.recorder.wordIndex] ?? "";
-    const at = this.recorder.charIndex;
-    const wasWrong = at > 0 && this.lastCharWasWrong(target, at - 1);
-
-    const event = wordDelete
-      ? this.recorder.deleteWord({ t: now })
-      : this.recorder.backspace({ t: now });
-
-    // A correction is not an engine event any more: nothing in the climb
-    // reacts to one, and Sprint scores it purely through the keystroke log.
-    void wasWrong;
-    void event;
-    this.publish(true);
-  }
-
-  private lastCharWasWrong(target: string, index: number): boolean {
-    for (let i = this.recorder.log.length - 1; i >= 0; i--) {
-      const k = this.recorder.log[i];
-      if (k.kind !== "insert") continue;
-      if (k.wordIndex === this.recorder.wordIndex && k.charIndex === index) {
-        return !k.correct;
-      }
-    }
-    void target;
-    return false;
-  }
-
   // ---- draft ------------------------------------------------------------
 
   openDraft(): void {
     if (this.state.phase !== "draft") return;
-    this.state.draft = draftRelics(this.state.relics, this.state.ascent?.band ?? 1, this.ctx.rngDraft);
+    this.state.draft = draftRelics(this.state.relics, this.state.ascent.band, this.ctx.rngDraft);
     if (this.state.draft.length === 0) {
       // Nothing left to offer: skip the draft rather than showing an empty one.
       this.resumeFromDraft();
@@ -740,7 +540,7 @@ export class GameEngine {
     this.state.draft = null;
     this.state.phase = "running";
     this.accumulator = 0;
-    this.emit({ type: "bandStart", band: this.state.ascent?.band ?? 1 });
+    this.emit({ type: "bandStart", band: this.state.ascent.band });
     this.publish(true);
   }
 
@@ -755,7 +555,7 @@ export class GameEngine {
 
   /** The visible platforms, active first. */
   get platforms(): readonly Platform[] {
-    return this.state.ascent?.visible ?? EMPTY_PLATFORMS;
+    return this.state.ascent.visible;
   }
 
   /** Builds the full result. Called once, when the run ends. */
@@ -820,10 +620,7 @@ function hudChanged(a: HudSnapshot, b: HudSnapshot): boolean {
     Math.round(a.gap * 40) !== Math.round(b.gap * 40) ||
     Math.round(a.wpm) !== Math.round(b.wpm) ||
     Math.round(a.accuracy * 10) !== Math.round(b.accuracy * 10) ||
-    a.wordIndex !== b.wordIndex ||
-    a.charIndex !== b.charIndex ||
     a.platforms[0]?.index !== b.platforms[0]?.index ||
-    a.platforms[0]?.typed !== b.platforms[0]?.typed ||
-    Math.floor((a.timeLeftMs ?? 0) / 100) !== Math.floor((b.timeLeftMs ?? 0) / 100)
+    a.platforms[0]?.typed !== b.platforms[0]?.typed
   );
 }

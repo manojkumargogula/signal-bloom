@@ -1,11 +1,15 @@
 /**
- * Plays two Sprint runs back to back and checks the history panel.
+ * Plays two runs back to back and checks the history panel.
  *
  * History is written at the end of a run and read on the results screen, so
  * the trend only exists once a second run has finished -- far enough in that
- * it is easy to ship broken.
+ * it is easy to ship broken. It also only exists if both runs are counted:
+ * personal bests and the trend line are keyed on the mode alone now, and the
+ * earlier version keyed them on run length too, which with an untimed game
+ * put every run in a bucket of its own and left the trend permanently empty.
  */
 import { chromium } from "playwright";
+import { climb, waitForResults } from "./lib/climb.mjs";
 
 const BASE = process.env.BASE ?? "http://localhost:3000";
 const errors = [];
@@ -20,40 +24,25 @@ page.on("console", (m) => {
 page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
 
 await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-await page.getByRole("button", { name: "Sprint", exact: true }).click();
-await page.waitForTimeout(700);
-await page.getByRole("button", { name: "15s", exact: true }).click();
-await page.waitForTimeout(700);
+await page.waitForTimeout(1200);
 
-// Read the character the game is waiting for, rather than replaying a list:
-// a run that auto-pauses discards keystrokes, and a script tracking its own
-// index would desynchronise.
-const expected = () =>
-  page.evaluate(() => document.querySelector(".caret")?.parentElement?.textContent ?? null);
-
-const paused = () =>
-  page.evaluate(() => document.body.textContent?.includes("The clock is stopped") ?? false);
-
-async function playRun(label) {
-  const started = Date.now();
-  while (Date.now() - started < 19_000) {
-    if (await paused()) {
-      await page.keyboard.press("Enter");
-      await page.waitForTimeout(100);
-      continue;
-    }
-    const ch = await expected();
-    if (ch === null) break;
-    await page.keyboard.type(ch);
-    await page.waitForTimeout(60);
-  }
-  await page.getByRole("button", { name: "Again", exact: true }).waitFor({ timeout: 25_000 });
+/**
+ * Plays a run and lets the water end it.
+ *
+ * Climbing a few platforms and then stopping, rather than typing until a
+ * clock runs out: there is no clock. The two runs climb DIFFERENT heights on
+ * purpose, so the trend has two distinct points to draw and a chart that
+ * silently plots one value twice would show.
+ */
+async function playRun(label, platforms) {
+  const cleared = await climb(page, platforms, 55);
+  await waitForResults(page);
   const wpm = await page.evaluate(() => document.querySelector(".num")?.textContent?.trim());
-  console.log(`  ${label}: ${wpm} WPM`);
+  console.log(`  ${label}: ${cleared} platforms, ${wpm} WPM`);
   return wpm;
 }
 
-await playRun("run 1");
+await playRun("run 1", 6);
 
 const firstRunMessage = await page.evaluate(() => {
   const text = document.body.textContent ?? "";
@@ -63,7 +52,7 @@ console.log(`  after run 1, shows a first-run message: ${firstRunMessage}`);
 
 await page.getByRole("button", { name: "Again", exact: true }).click();
 await page.waitForTimeout(900);
-await playRun("run 2");
+await playRun("run 2", 10);
 
 const trend = await page.evaluate(() => {
   const heading = Array.from(document.querySelectorAll("h3")).find((h) =>

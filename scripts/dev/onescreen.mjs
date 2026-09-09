@@ -17,11 +17,12 @@
  * A panel MAY scroll once a `<details>` inside it is opened — that is the
  * designed escape hatch — so the panel check runs with everything closed.
  *
- * Both modes are measured. Ascent's verdict carries a line Sprint's does not,
- * and it is the taller of the two, so checking only the quick Sprint run would
- * have missed exactly the case that overflows.
+ * Two variants are measured, because the verdict column has two heights: a
+ * counted run, and one the game refuses to record. The refusal adds a notice,
+ * which makes it the taller of the two and the one that actually overflows.
  */
 import { chromium } from "playwright";
+import { climb, waitForResults } from "./lib/climb.mjs";
 
 const BASE = process.env.BASE ?? "http://localhost:3000";
 const OUT = process.env.OUT ?? "/tmp/shots";
@@ -53,27 +54,10 @@ for (const viewport of VIEWPORTS) {
   report(viewport, "playing", playing);
 
   // ---- get to the results ----------------------------------------------
-  // Sprint at 15s, typed correctly, so the run is VALID -- the layout most
-  // players see. An invalid run adds a "not counted" panel, which makes the
-  // verdict column taller; ONESCREEN_MISTYPE=1 produces that variant.
-  // The mode picker is a `role="group"` of `aria-pressed` buttons, not a
-  // radiogroup, so it is addressed by button name.
-  await page.getByRole("button", { name: "Sprint", exact: true }).click();
-  await page.getByRole("button", { name: "15s", exact: true }).click();
-  await page.waitForTimeout(500);
-
-  const text = await page.evaluate(() =>
-    Array.from(document.querySelectorAll(".type-surface > span"))
-      .map((s) => s.textContent ?? "")
-      .join(""),
-  );
-  if (!text) problems.push(`${viewport.label}: no typing surface found`);
-
-  const typed = process.env.ONESCREEN_MISTYPE
-    ? text.slice(0, 220).replace(/[a-z]/g, (c) => (Math.random() < 0.4 ? "q" : c))
-    : text.slice(0, 220);
-  await page.keyboard.type(typed, { delay: 55 });
-  // The clock runs 15s from the first keystroke; wait it out.
+  // A real climb, then let the water win: there is no clock to run down. Six
+  // platforms is enough for the analysis to have a per-second series, a
+  // history point and a populated heatmap, which is the layout a player sees.
+  await climb(page, 6, 55);
   await waitForResults(page);
 
   // ---- phase two: the results ------------------------------------------
@@ -102,34 +86,23 @@ for (const viewport of VIEWPORTS) {
     problems.push(`${viewport.label}: could not find the results container`);
   }
 
-  await measurePanels(page, viewport, "sprint");
+  await measurePanels(page, viewport, "counted");
 
   await page.screenshot({ path: `${OUT}/onescreen-${viewport.label}.png` });
   console.log(`  shot: onescreen-${viewport.label}.png`);
 
-  // ---- and again for Ascent, whose verdict is the taller one -----------
-  // Clear the grace platforms so the flood starts moving, then stop typing:
-  // the water closes the gap in about fifteen seconds, which is much the
-  // fastest honest way to reach an Ascent result.
-  await page.getByRole("button", { name: "Ascent", exact: true }).click();
+  // ---- and again for a run the game will not record -------------------
+  // The taller verdict: too short to measure, so it carries a "no record"
+  // notice on top of everything the counted variant shows.
+  await page.getByRole("button", { name: "Again", exact: true }).click();
   await page.waitForTimeout(900);
-  for (let i = 0; i < 4; i++) {
-    const word = await page.evaluate(
-      () => document.querySelector('.platform[data-rank="0"] .platform-word')?.textContent ?? "",
-    );
-    if (!word) break;
-    const done = await page.evaluate(
-      () => document.querySelectorAll('.platform[data-rank="0"] [data-state="done"]').length,
-    );
-    await page.keyboard.type(word.slice(done), { delay: 40 });
-    await page.waitForTimeout(320);
-  }
+  await climb(page, 2, 40);
   await waitForResults(page);
 
-  report(viewport, "ascent results", await docOverflow(page));
-  await measurePanels(page, viewport, "ascent");
-  await page.screenshot({ path: `${OUT}/onescreen-ascent-${viewport.label}.png` });
-  console.log(`  shot: onescreen-ascent-${viewport.label}.png`);
+  report(viewport, "uncounted results", await docOverflow(page));
+  await measurePanels(page, viewport, "uncounted");
+  await page.screenshot({ path: `${OUT}/onescreen-uncounted-${viewport.label}.png` });
+  console.log(`  shot: onescreen-uncounted-${viewport.label}.png`);
 
   await page.close();
 }
@@ -176,19 +149,6 @@ async function measurePanels(page, viewport, mode) {
       );
     }
   }
-}
-
-/**
- * Waits for a run to end and its analysis to render.
- *
- * Keyed on the Again button, which exists only in the results. The obvious
- * signal -- the word "wpm" appearing on the page -- is wrong: the in-game HUD
- * carries a WPM readout too, so it matched instantly and the Ascent pass
- * silently measured a screen that was still being played.
- */
-async function waitForResults(page) {
-  await page.getByRole("button", { name: "Again", exact: true }).waitFor({ timeout: 60_000 });
-  await page.waitForTimeout(700);
 }
 
 /** Document-level overflow, which must be zero in every phase. */

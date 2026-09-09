@@ -37,9 +37,9 @@ export default function HowItWorksPage() {
       <DocPage
         eyebrow="Documentation"
         title="How the game works"
-        lede="Signal Bloom is a listening post. Words arrive as transmissions closing on
-          your position, and you decode one by typing it before it reaches you. Three modes
-          share the same engine and the same analysis."
+        lede="Signal Bloom is one game. You are a technician climbing a signal array,
+          typing the word on the platform above to leap to it, while a flood rises under
+          you. There is no clock — the water is the clock."
       >
         <Answer id="ascent" question="What happens during a climb?">
           <p>
@@ -115,29 +115,32 @@ export default function HowItWorksPage() {
           </p>
         </Answer>
 
-        <Answer id="sprint" question="How does Sprint choose its words?">
+        <Answer id="words" question="Where do the words come from?">
           <p>
-            Sprint draws from a shuffled bag rather than picking at random, so every word
-            in the list appears once before any of them repeats. Independent random draws
-            produce immediate repetitions that players read as a bug.
+            A list that ships with the game, combining the most common English words with
+            a longer and less common vocabulary. Both halves are needed: word length steps
+            up with each band, and the common list alone holds only sixty-four words of six
+            to eight letters, so a long climb would circle the same few dozen from band
+            four onward.
           </p>
           <p>
-            Word lists ship with the game and cover common English, longer and less common
-            vocabulary, programming symbols and keywords, numbers, and public-domain
-            quotations. The clock starts on your first keystroke, not when the page loads.
+            Within a length, words are drawn from a shuffled bag rather than picked at
+            random, so every candidate appears once before any of them repeats. Independent
+            random draws produce immediate repetitions that players read as a bug.
           </p>
         </Answer>
 
         <Answer id="scoring" question="How is a run scored?">
           <p>
-            Score applies only to Ascent, and it is deliberately two things rather than
-            four: ten points per platform, multiplied by your combo. Your combo rises with
-            every word typed without a mistake and resets on any wrong letter. Height is
-            the number worth bragging about.
+            Deliberately two things rather than four: ten points per platform, multiplied
+            by your combo. Your combo rises with every word typed without a mistake and
+            resets on any wrong letter. Height is the number worth bragging about.
           </p>
           <p>
-            Sprint and Zen have no score. Their output is the analysis, which is the point
-            of them.
+            The analysis is the other half of the output, and it does not depend on the
+            score at all — it is derived from the keystroke log, so it says the same thing
+            about a run that ended at platform twelve as about one that ended at two
+            hundred.
           </p>
         </Answer>
 

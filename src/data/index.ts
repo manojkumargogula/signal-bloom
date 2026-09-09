@@ -1,5 +1,6 @@
 import type { Corpus } from "./types";
 import enCommon from "./words/en-common";
+import enClimb from "./words/en-climb";
 import enAdvanced from "./words/en-advanced";
 import enCode from "./words/en-code";
 import enNumbers from "./words/en-numbers";
@@ -12,9 +13,10 @@ import enQuotes from "./quotes";
  * explicit rather than a glob so the bundler can tree-shake and so a
  * typo produces a compile error instead of a silently missing list.
  */
-export const CORPORA: Corpus[] = [enCommon, enAdvanced, enCode, enNumbers, enQuotes];
+export const CORPORA: Corpus[] = [enClimb, enCommon, enAdvanced, enCode, enNumbers, enQuotes];
 
-export const DEFAULT_CORPUS_ID = "en-common";
+/** What the climb draws from. */
+export const DEFAULT_CORPUS_ID = "en-climb";
 
 export function getCorpus(id: string): Corpus {
   return CORPORA.find((c) => c.id === id) ?? CORPORA[0];

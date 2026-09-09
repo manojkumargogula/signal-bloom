@@ -45,6 +45,23 @@ export const FLOOD_BASE = 0.18;
 export const FLOOD_GRACE_PLATFORMS = 3;
 
 /**
+ * The longest the flood will hold still, whatever the player does.
+ *
+ * The grace period was purely a platform count, and with no clock anywhere in
+ * the game that left a state with no exit: clear one or two platforms and stop
+ * typing, and the flood never starts, so the run cannot end. Not a
+ * hypothetical -- a two-platform run was left waiting for a result that was
+ * never coming.
+ *
+ * Twelve seconds because the opening platforms carry single letters: three of
+ * them takes a first-time player two or three seconds and a fast one under
+ * one. So this bound never fires for anybody actually playing, which is the
+ * point -- it closes the hole without touching the curve that was tuned
+ * against real typing speeds.
+ */
+export const FLOOD_GRACE_MS = 12_000;
+
+/**
  * Flood acceleration per platform cleared.
  *
  * Per *platform*, deliberately not per second. That way a slow player never
@@ -161,6 +178,8 @@ export interface AscentState {
   gap: number;
   /** Current flood speed, before the perfect-word dip. */
   floodRate: number;
+  /** Simulated milliseconds since the climb began, for the grace period. */
+  elapsedMs: number;
   /** Remaining milliseconds of the dip a perfect word applied. */
   dipMs: number;
 
@@ -199,6 +218,7 @@ export function createAscentState(): AscentState {
     gap: GAP_START,
     // Still until the grace period is over.
     floodRate: 0,
+    elapsedMs: 0,
     dipMs: 0,
     shields: SHIELD_START,
     phase: "grounded",
@@ -413,10 +433,7 @@ export function clearPlatform(
   // passed. That is what lets one curve serve every skill level. It also
   // stays completely still for the opening few platforms, so a new player has
   // room to work out what the screen is telling them.
-  state.floodRate =
-    state.height < FLOOD_GRACE_PLATFORMS
-      ? 0
-      : FLOOD_BASE * FLOOD_ACCEL ** (state.height - FLOOD_GRACE_PLATFORMS);
+  state.floodRate = floodRateFor(state.height);
 
   // A perfect word slows the flood; it never pushes it back down. Reverse
   // motion in the periphery under an upward-scrolling camera is the exact
@@ -447,8 +464,22 @@ export function clearPlatform(
 }
 
 /** Advances the flood and the climber by one fixed step. */
+/**
+ * The flood's speed at a given height, in spacings per second.
+ *
+ * Zero through the opening platforms, then accelerating per platform cleared.
+ * A function rather than a value written when a platform clears, because the
+ * grace period can also expire on time and that has to produce the same rate
+ * as clearing the third platform would.
+ */
+export function floodRateFor(height: number): number {
+  if (height < FLOOD_GRACE_PLATFORMS) return 0;
+  return FLOOD_BASE * FLOOD_ACCEL ** (height - FLOOD_GRACE_PLATFORMS);
+}
+
 export function stepAscent(state: AscentState, dtMs: number): void {
   const seconds = dtMs / 1000;
+  state.elapsedMs += dtMs;
 
   // ---- the climber's phase machine ---------------------------------------
   state.phaseMs += dtMs;
@@ -466,6 +497,14 @@ export function stepAscent(state: AscentState, dtMs: number): void {
   }
 
   // ---- the flood ---------------------------------------------------------
+  // The grace period ends on the third platform OR on the clock, whichever
+  // comes first, so a run that stops early still finishes. From here the rate
+  // is whatever the height says it is -- expiring on time gives exactly the
+  // opening rate rather than a special case.
+  if (state.floodRate === 0 && state.elapsedMs >= FLOOD_GRACE_MS) {
+    state.floodRate = FLOOD_BASE;
+  }
+
   let rate = state.floodRate;
   if (state.dipMs > 0) {
     state.dipMs = Math.max(0, state.dipMs - dtMs);
