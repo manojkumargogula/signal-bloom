@@ -314,6 +314,18 @@ export class GameEngine {
     this.invalidReasons.add(reason);
   }
 
+  /**
+   * Replaces the event handler.
+   *
+   * Exposed so React can attach its handler in an effect rather than passing
+   * one through a ref: a ref written or read during render is a correctness
+   * hazard under concurrent rendering, and the engine is perfectly capable of
+   * owning this itself.
+   */
+  setEventHandler(handler: ((event: EngineEvent) => void) | undefined): void {
+    this.onEvent = handler;
+  }
+
   // ---- the loop ---------------------------------------------------------
 
   /**

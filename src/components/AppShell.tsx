@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
 import { CORPORA } from "@/data";
 import { makeSeed } from "@/engine/rng";
 import type { RunResult } from "@/engine/GameEngine";
 import type { ModeId } from "@/engine/types";
+import { useIsClient } from "@/react/useIsClient";
 import { useTheme } from "@/react/useTheme";
 import { saveRun } from "@/storage/history";
 import { Game } from "./Game";
@@ -49,14 +50,17 @@ export function AppShell() {
   const [mode, setMode] = useState<ModeId>("onslaught");
   const [corpusId, setCorpusId] = useState("en-common");
   const [durationMs, setDurationMs] = useState(30_000);
-  const [seed, setSeed] = useState<string | null>(null);
   const [result, setResult] = useState<RunResult | null>(null);
   const { resolved, cycle } = useTheme();
   const shellRef = useRef<HTMLDivElement>(null);
 
-  // Generated after mount: calling Math.random during render would produce a
-  // different tree on the server than on the client.
-  useEffect(() => setSeed(makeSeed()), []);
+  // A run's seed is random, and the word list is derived from it, so the
+  // server could never render the same words the client generates. The board
+  // is therefore held back for the hydrating render and appears in the
+  // ordinary re-render that follows -- not from a mount effect, which would
+  // cascade.
+  const isClient = useIsClient();
+  const [seed, setSeed] = useState(() => makeSeed());
 
   const onComplete = useCallback((run: RunResult) => {
     setResult(run);
@@ -135,7 +139,7 @@ export function AppShell() {
 
       {/* ---------------------------------------------------------- board -- */}
       <div className="relative min-h-0 flex-1">
-        {seed && !result && (
+        {isClient && !result && (
           <Game
             key={`${mode}-${seed}-${corpusId}-${durationMs}`}
             mode={mode}

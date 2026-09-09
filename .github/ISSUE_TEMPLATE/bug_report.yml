@@ -1,0 +1,58 @@
+name: Bug report
+description: Something in the game behaves incorrectly.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Signal Bloom keeps everything in your browser, so
+        please do not paste anything you would not want public.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce
+      placeholder: |
+        1. Open Onslaught
+        2. Type ...
+        3. ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Which mode
+      options: ["Onslaught", "Sprint", "Zen", "Results screen", "Not mode-specific"]
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and operating system
+      placeholder: Firefox 142 on Windows 11
+    validations:
+      required: true
+
+  - type: input
+    id: layout
+    attributes:
+      label: Keyboard layout
+      description: Relevant for anything involving keystrokes, accuracy or the heatmap.
+      placeholder: QWERTY (US)
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Console errors
+      description: Anything red in the browser console, if there is anything.
+      render: text

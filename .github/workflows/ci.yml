@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # gen-lastmod reads real commit dates, so it needs history.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Regenerate derived files
+        run: pnpm gen
+
+      - name: Derived files are committed and in sync
+        # Icons are generated from the hand-authored SVGs by a script. This is
+        # what stops a hand-edited PNG drifting away from its source.
+        run: git diff --exit-code
+
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+
+      - name: Design tokens meet WCAG AA
+        run: pnpm contrast
+
+      - name: Build the static export
+        run: pnpm build
+        env:
+          # Built with a base path on purpose: every base-path failure mode is
+          # invisible at the default path, which is where dev runs.
+          NEXT_PUBLIC_BASE_PATH: /signal-bloom
+          NEXT_PUBLIC_SITE_URL: https://manojkumargogula.github.io
+
+      - name: Verify the export
+        run: node scripts/verify-export.mjs
+        env:
+          NEXT_PUBLIC_BASE_PATH: /signal-bloom
+          NEXT_PUBLIC_SITE_URL: https://manojkumargogula.github.io

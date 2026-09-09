@@ -1,0 +1,62 @@
+name: Word list contribution
+description: Propose a new word list, in any language.
+labels: ["word list", "good first issue"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Word lists are the easiest contribution to make: one file, one default
+        export. See
+        [CONTRIBUTING.md](https://github.com/manojkumargogula/signal-bloom/blob/main/CONTRIBUTING.md#adding-a-word-list).
+
+        The licence question below is the important one. A list scraped from a
+        paid dictionary is the easiest way for this project to accidentally
+        take on someone else's copyright, and it arrives looking like a trivial
+        change. If you are unsure, say so and we will work it out.
+
+  - type: input
+    id: language
+    attributes:
+      label: Language
+      placeholder: German (de)
+    validations:
+      required: true
+
+  - type: input
+    id: source
+    attributes:
+      label: Where the words come from
+      description: A name and, if there is one, a URL.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: license
+    attributes:
+      label: Licence of that source
+      options:
+        - CC0-1.0 (public domain dedication)
+        - Public domain (no rights reserved)
+        - MIT
+        - Apache-2.0
+        - CC-BY-4.0
+        - CC-BY-SA-4.0
+        - Unlicense
+        - I am not sure
+        - Something else (describe below)
+    validations:
+      required: true
+
+  - type: input
+    id: count
+    attributes:
+      label: Roughly how many words
+      placeholder: "1000"
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: >
+        Particularly: does "five characters is one word" hold for this script?
+        If not, say so, because the WPM unit is configurable per list.

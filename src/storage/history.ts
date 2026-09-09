@@ -115,6 +115,7 @@ function updateBest(result: RunResult): void {
       at: result.startedAt,
     };
     write(BESTS_KEY, bests);
+    invalidateBests();
   }
 }
 
@@ -135,4 +136,41 @@ export function clearHistory(): void {
   } catch {
     // Nothing to do; the player asked to clear data that cannot be reached.
   }
+  invalidateBests();
+}
+
+
+/**
+ * Personal bests as an external store, for React to read.
+ *
+ * localStorage cannot be touched during render, so the naive approach is to
+ * read it in an effect and mirror it into state -- which causes a cascading
+ * render on mount and gives the first paint a value that is known to be
+ * wrong. Reading it through `useSyncExternalStore` instead means one render
+ * with the right answer.
+ */
+const bestsListeners = new Set<() => void>();
+
+/** Cached so `getSnapshot` returns a stable reference between writes. */
+let bestsCache: Bests | null = null;
+
+export function subscribeBests(listener: () => void): () => void {
+  bestsListeners.add(listener);
+  return () => bestsListeners.delete(listener);
+}
+
+export function getBestsSnapshot(): Bests {
+  if (bestsCache === null) bestsCache = loadBests();
+  return bestsCache;
+}
+
+export function getBestsServerSnapshot(): Bests {
+  return EMPTY_BESTS;
+}
+
+const EMPTY_BESTS: Bests = {};
+
+function invalidateBests(): void {
+  bestsCache = null;
+  for (const listener of bestsListeners) listener();
 }

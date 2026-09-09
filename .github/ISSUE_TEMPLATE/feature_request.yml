@@ -1,0 +1,28 @@
+name: Feature or relic proposal
+description: Suggest something new.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is the problem
+      description: >
+        What is annoying, missing or unclear today? Describe the situation
+        rather than the solution -- it is often not the solution we end up with.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        **Proposing a relic?** State exactly what changes, in the terms a
+        player would read it in — "your combo can climb to 80 instead of 50",
+        not "improves combos". A relic whose effect has to be guessed at is a
+        coin flip rather than a choice, and there is a test that enforces it.

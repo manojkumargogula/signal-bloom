@@ -23,7 +23,6 @@ export interface GameProps {
   durationMs?: number;
   wordCount?: number;
   onComplete?: (result: RunResult) => void;
-  onExit?: () => void;
 }
 
 /**
@@ -42,7 +41,6 @@ export function Game({
   durationMs,
   wordCount,
   onComplete,
-  onExit,
 }: GameProps) {
   const shellRef = useRef<HTMLDivElement>(null);
   const fieldRef = useRef<HTMLDivElement>(null);
@@ -52,7 +50,7 @@ export function Game({
   const announceRef = useRef<HTMLParagraphElement>(null);
 
   const motion = useMotionPrefs();
-  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(shellRef, inputRef);
+  const { toggle: toggleFullscreen } = useFullscreen(shellRef, inputRef);
   const [glFailed, setGlFailed] = useState(false);
 
   const nebulaRef = useRef<NebulaLayer | null>(null);
@@ -100,7 +98,7 @@ export function Game({
     }
   }, []);
 
-  const { engine, snapshot, restart } = useGame({
+  const { engine, snapshot } = useGame({
     mode,
     seed,
     corpusId,
@@ -382,9 +380,14 @@ export function Game({
 
 function Overlay({ title, hint }: { title: string; hint: string }) {
   return (
-    <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-[var(--bg)]/80">
-      <p className="label text-[var(--amber)]">{title}</p>
-      <p className="text-sm text-[var(--fg-muted)]">{hint}</p>
+    <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[var(--bg)]/85">
+      {/* A solid panel, not a translucent wash. An overlay laid straight over
+          the typing surface leaves its own text competing with the words
+          underneath and neither is readable. */}
+      <div className="flex flex-col items-center gap-2 border border-[var(--line-strong)] bg-[var(--bg-panel)] px-8 py-6">
+        <p className="label text-[var(--amber)]">{title}</p>
+        <p className="text-sm text-[var(--fg-muted)]">{hint}</p>
+      </div>
     </div>
   );
 }

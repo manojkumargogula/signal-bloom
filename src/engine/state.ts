@@ -1,5 +1,5 @@
 import { getCorpus } from "@/data";
-import { Bag, makeRng, type Rng } from "./rng";
+import { Bag, makeRng } from "./rng";
 import { RelicRuntime } from "./relics/runtime";
 import { BASE_STATS, type EngineContext, type GameState, type ModeId } from "./types";
 

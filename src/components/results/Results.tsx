@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import Link from "next/link";
 import type { RunResult } from "@/engine/GameEngine";
-import { isPersonalBest } from "@/storage/history";
+import {
+  bestKey,
+  getBestsServerSnapshot,
+  getBestsSnapshot,
+  subscribeBests,
+} from "@/storage/history";
 import { Button } from "../ui/Button";
 import { FingerChart } from "./FingerChart";
 import { Heatmap } from "./Heatmap";
@@ -24,22 +29,47 @@ interface ResultsProps {
 
 export function Results({ result, onAgain }: ResultsProps) {
   const m = result.metrics;
-  const [isBest, setIsBest] = useState(false);
 
-  // Read after mount: localStorage is unavailable during render.
-  useEffect(() => setIsBest(isPersonalBest(result)), [result]);
+  // Read through a store rather than mirrored into state: localStorage cannot
+  // be touched during render, and an effect that copies it in would give the
+  // first paint a value already known to be wrong.
+  const bests = useSyncExternalStore(
+    subscribeBests,
+    getBestsSnapshot,
+    getBestsServerSnapshot,
+  );
 
+  // The run is saved before this screen renders, so its own entry is already
+  // in place; equality means this run set the record.
+  const best = bests[bestKey({ mode: result.mode, durationMs: m.durationMs })];
+  const isBest = m.valid && (!best || m.wpm >= best.wpm);
+
+  /**
+   * One sentence naming the most useful thing in the run.
+   *
+   * It has to say what actually made the item rank. A key can top the list on
+   * hesitation alone with perfect accuracy, so calling that a "weakest key at
+   * 100% accuracy" is nonsense the player will notice immediately.
+   */
   const problemSummary = useMemo(() => {
-    if (m.problemBigrams.length > 0) {
-      const worst = m.problemBigrams[0];
-      return `Your slowest pair was “${worst.label}” — about ${Math.round(worst.costMs)}ms lost each time.`;
+    const bigram = m.problemBigrams[0];
+    const key = m.problemKeys[0];
+
+    if (bigram && (!key || bigram.costMs >= key.costMs)) {
+      return bigram.accuracy < 1
+        ? `The pair “${bigram.label}” cost you the most: ${(bigram.accuracy * 100).toFixed(0)}% accurate, about ${Math.round(bigram.costMs)}ms lost each time.`
+        : `You typed “${bigram.label}” accurately but slowly — about ${Math.round(bigram.costMs)}ms behind your usual pace each time.`;
     }
-    if (m.problemKeys.length > 0) {
-      const worst = m.problemKeys[0];
-      return `Your weakest key was ${worst.label} at ${(worst.accuracy * 100).toFixed(0)}% accuracy.`;
+
+    if (key) {
+      return key.accuracy < 1
+        ? `${key.label} was your weakest key: ${(key.accuracy * 100).toFixed(0)}% accurate over ${key.attempts} presses.`
+        : `You hit ${key.label} accurately but hesitated before it — about ${Math.round(key.costMs)}ms each time.`;
     }
+
+    if (m.accuracy === 100) return "A clean run. Nothing stood out as costing you time.";
     return null;
-  }, [m.problemBigrams, m.problemKeys]);
+  }, [m.problemBigrams, m.problemKeys, m.accuracy]);
 
   return (
     <div className="flex flex-col gap-8">

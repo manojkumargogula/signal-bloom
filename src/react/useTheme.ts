@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 export type ThemeChoice = "dark" | "light" | "system";
 
@@ -9,10 +9,10 @@ export const THEME_STORAGE_KEY = "signalbloom:v1:theme";
 /**
  * The inline script that resolves the theme before first paint.
  *
- * Without this the page renders in the default theme and then snaps to the
+ * Without it the page renders in the default theme and then snaps to the
  * player's choice, which is both ugly and a layout-stability problem. It has
- * to be inline and blocking, so it is kept as a single exported string: the
- * same source feeds the script tag and the CSP hash.
+ * to be inline and blocking, so it lives here as a single exported string:
+ * one source feeds the script tag and, if a CSP is ever added, its hash.
  */
 export const THEME_INIT_SCRIPT = `
 try {
@@ -25,57 +25,108 @@ try {
 }
 `.trim();
 
-function systemTheme(): "dark" | "light" {
+/**
+ * The theme, as an external store rather than as React state.
+ *
+ * It genuinely is external: the authoritative value lives on the document
+ * element (written before React ever runs, by the script above), backed by
+ * localStorage and by the OS preference. Mirroring that into `useState` and
+ * syncing it in an effect would mean two sources of truth, a render with the
+ * wrong value, and a cascading re-render on mount.
+ */
+
+type Resolved = "dark" | "light";
+
+const listeners = new Set<() => void>();
+
+function notify(): void {
+  for (const listener of listeners) listener();
+}
+
+function systemTheme(): Resolved {
   if (typeof window === "undefined") return "dark";
   return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
 
-export function useTheme() {
-  const [choice, setChoice] = useState<ThemeChoice>("system");
-  const [resolved, setResolved] = useState<"dark" | "light">("dark");
+function readChoice(): ThemeChoice {
+  try {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === "dark" || stored === "light") return stored;
+  } catch {
+    // Private browsing can refuse the read. The OS preference still applies.
+  }
+  return "system";
+}
 
-  // Read after mount only: touching localStorage during render would produce
-  // a different tree on the server and on the client.
-  useEffect(() => {
-    let stored: string | null = null;
-    try {
-      stored = localStorage.getItem(THEME_STORAGE_KEY);
-    } catch {
-      stored = null;
+function resolve(choice: ThemeChoice): Resolved {
+  return choice === "system" ? systemTheme() : choice;
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+
+  // Follow the OS while no explicit choice is stored.
+  const query = window.matchMedia("(prefers-color-scheme: light)");
+  const onSystemChange = () => {
+    if (readChoice() === "system") {
+      apply(systemTheme());
+      notify();
     }
-    const next: ThemeChoice = stored === "dark" || stored === "light" ? stored : "system";
-    setChoice(next);
-    setResolved(next === "system" ? systemTheme() : next);
-  }, []);
+  };
+  query.addEventListener("change", onSystemChange);
 
-  // Follow the system while the player has not chosen explicitly.
-  useEffect(() => {
-    if (choice !== "system") return;
-    const query = window.matchMedia("(prefers-color-scheme: light)");
-    const onChange = () => setResolved(query.matches ? "light" : "dark");
-    query.addEventListener("change", onChange);
-    return () => query.removeEventListener("change", onChange);
-  }, [choice]);
+  // Another tab changing the theme should be followed here too.
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === THEME_STORAGE_KEY) {
+      apply(resolve(readChoice()));
+      notify();
+    }
+  };
+  window.addEventListener("storage", onStorage);
 
-  useEffect(() => {
-    document.documentElement.dataset.theme = resolved;
-  }, [resolved]);
+  return () => {
+    listeners.delete(listener);
+    query.removeEventListener("change", onSystemChange);
+    window.removeEventListener("storage", onStorage);
+  };
+}
+
+function apply(resolved: Resolved): void {
+  document.documentElement.dataset.theme = resolved;
+}
+
+/**
+ * The snapshot is read off the document element, which the pre-paint script
+ * has already stamped. That is what makes the first client render agree with
+ * the server render and with what is actually on screen.
+ */
+function getSnapshot(): Resolved {
+  const stamped = document.documentElement.dataset.theme;
+  return stamped === "light" ? "light" : "dark";
+}
+
+function getServerSnapshot(): Resolved {
+  return "dark";
+}
+
+export function useTheme() {
+  const resolved = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const set = useCallback((next: ThemeChoice) => {
-    setChoice(next);
-    setResolved(next === "system" ? systemTheme() : next);
     try {
       if (next === "system") localStorage.removeItem(THEME_STORAGE_KEY);
       else localStorage.setItem(THEME_STORAGE_KEY, next);
     } catch {
-      // Private browsing rejects writes. The theme still applies for this
+      // Private browsing rejects the write. The theme still applies for this
       // session; only the memory of it is lost.
     }
+    apply(resolve(next));
+    notify();
   }, []);
 
   const cycle = useCallback(() => {
     set(resolved === "dark" ? "light" : "dark");
   }, [resolved, set]);
 
-  return { choice, resolved, set, cycle };
+  return { resolved, set, cycle };
 }
