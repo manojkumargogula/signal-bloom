@@ -70,24 +70,24 @@ export class RelicRuntime {
   }
 }
 
-const RARITY_WEIGHT: Record<string, (wave: number) => number> = {
+const RARITY_WEIGHT: Record<string, (band: number) => number> = {
   // Epics stay out of reach early, then become plausible; commons never
   // vanish entirely, so a late draft is still a real choice rather than a
   // guaranteed jackpot.
   common: () => 60,
-  rare: (wave) => 20 + Math.min(25, wave * 3),
-  epic: (wave) => Math.max(0, Math.min(22, (wave - 2) * 4)),
+  rare: (band) => 20 + Math.min(25, band * 8),
+  epic: (band) => Math.max(0, Math.min(22, (band - 1) * 9)),
 };
 
 export function eligibleRelics(
   owned: readonly OwnedRelic[],
-  wave: number,
+  band: number,
 ): RelicDef[] {
   const ownedMap = new Map(owned.map((o) => [o.id, o.stacks]));
   const ownedIds = new Set(ownedMap.keys());
 
   return RELICS.filter((def) => {
-    if ((def.minWave ?? 0) > wave) return false;
+    if ((def.minBand ?? 0) > band) return false;
     if ((ownedMap.get(def.id) ?? 0) >= def.maxStacks) return false;
     // Mutual exclusion has to be checked in both directions: the held relic
     // may be the one naming the conflict.
@@ -102,16 +102,16 @@ export function eligibleRelics(
 /** Draws `count` distinct relic offers for a between-wave draft. */
 export function draftRelics(
   owned: readonly OwnedRelic[],
-  wave: number,
+  band: number,
   rng: Rng,
   count = 3,
 ): string[] {
-  const pool = eligibleRelics(owned, wave);
+  const pool = eligibleRelics(owned, band);
   const picked: string[] = [];
   const remaining = [...pool];
 
   while (picked.length < count && remaining.length > 0) {
-    const chosen = rng.weighted(remaining, (def) => RARITY_WEIGHT[def.rarity](wave));
+    const chosen = rng.weighted(remaining, (def) => RARITY_WEIGHT[def.rarity](band));
     picked.push(chosen.id);
     remaining.splice(remaining.indexOf(chosen), 1);
   }
@@ -140,23 +140,30 @@ export function makeEffectApi(
       return state.stats;
     },
     grantShield(n) {
-      if (n <= 0) return;
-      const before = state.shields;
-      state.shields = Math.min(state.shields + n, state.stats.maxShields);
-      if (state.shields !== before) emit({ type: "shieldGained", total: state.shields });
+      const ascent = state.ascent;
+      if (!ascent || n <= 0) return;
+      const before = ascent.shields;
+      ascent.shields = Math.min(ascent.shields + n, state.stats.maxShields);
+      if (ascent.shields !== before) emit({ type: "shieldGained", total: ascent.shields });
     },
-    addWaveTime(ms) {
-      state.waveClock = Math.max(0, state.waveClock - ms);
+    pushFlood(spacings) {
+      const ascent = state.ascent;
+      if (!ascent || spacings <= 0) return;
+      ascent.gap = Math.min(ascent.gap + spacings, state.stats.gapMax);
     },
     addScore(n) {
-      state.score += Math.round(n);
+      if (state.ascent) state.ascent.score += Math.round(n);
     },
     addCombo(n) {
-      state.combo = Math.min(state.combo + n, state.stats.comboCap);
-      state.comboBest = Math.max(state.comboBest, state.combo);
+      const ascent = state.ascent;
+      if (!ascent) return;
+      ascent.combo = Math.min(ascent.combo + n, state.stats.comboCap);
+      ascent.comboBest = Math.max(ascent.comboBest, ascent.combo);
     },
     setCombo(n) {
-      state.combo = Math.max(0, Math.min(n, state.stats.comboCap));
+      const ascent = state.ascent;
+      if (!ascent) return;
+      ascent.combo = Math.max(0, Math.min(n, state.stats.comboCap));
     },
     rng: () => rng.next(),
   };

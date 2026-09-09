@@ -126,12 +126,12 @@ export function Results({ result, onAgain }: ResultsProps) {
           </p>
         )}
 
-        {result.onslaught && (
+        {result.ascent && (
           <dl className="mt-6 grid grid-cols-2 gap-x-8 gap-y-3 border-t border-[var(--line)] pt-4 sm:grid-cols-4">
-            <Figure label="Wave" value={String(result.onslaught.wave)} />
-            <Figure label="Score" value={result.onslaught.score.toLocaleString()} />
-            <Figure label="Best combo" value={`×${result.onslaught.comboBest}`} />
-            <Figure label="Decoded" value={String(result.onslaught.decoded)} />
+            <Figure label="Height" value={`${result.ascent.height} platforms`} />
+            <Figure label="Band" value={String(result.ascent.band)} />
+            <Figure label="Score" value={result.ascent.score.toLocaleString()} />
+            <Figure label="Best combo" value={`×${result.ascent.comboBest}`} />
           </dl>
         )}
 

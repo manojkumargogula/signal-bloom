@@ -29,7 +29,7 @@ import { Wordmark } from "./site/Wordmark";
  */
 
 const MODES: readonly { value: ModeId; label: string }[] = [
-  { value: "onslaught", label: "Onslaught" },
+  { value: "ascent", label: "Ascent" },
   { value: "sprint", label: "Sprint" },
   { value: "zen", label: "Zen" },
 ];
@@ -42,13 +42,13 @@ const DURATIONS = [
 ] as const;
 
 const MODE_HINT: Record<ModeId, string> = {
-  onslaught: "Type a word to lock it. Decode it before it reaches you.",
+  ascent: "Type the word on the platform above. The water is rising.",
   sprint: "Type the words. The clock starts on your first keystroke.",
   zen: "No timer, no score. Stop whenever you like.",
 };
 
 export function AppShell() {
-  const [mode, setMode] = useState<ModeId>("onslaught");
+  const [mode, setMode] = useState<ModeId>("ascent");
   const [corpusId, setCorpusId] = useState("en-common");
   const [durationMs, setDurationMs] = useState(30_000);
   const [result, setResult] = useState<RunResult | null>(null);
@@ -116,7 +116,7 @@ export function AppShell() {
             />
           )}
 
-          {mode !== "onslaught" && (
+          {mode !== "ascent" && (
             <Segmented
               options={corpusOptions}
               value={corpusId}
@@ -146,7 +146,7 @@ export function AppShell() {
             key={`${mode}-${seed}-${corpusId}-${durationMs}`}
             mode={mode}
             seed={seed}
-            corpusId={mode === "onslaught" ? "en-common" : corpusId}
+            corpusId={mode === "ascent" ? "en-common" : corpusId}
             durationMs={mode === "sprint" ? durationMs : undefined}
             onComplete={onComplete}
           />

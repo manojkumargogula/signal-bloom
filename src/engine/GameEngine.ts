@@ -4,10 +4,18 @@ import type { TypingMetrics } from "@/analytics/types";
 import { CHARS_PER_WORD, type WpmUnit } from "@/data/types";
 import { getCorpus } from "@/data";
 import { addRelic, draftRelics, makeEffectApi, RelicRuntime } from "./relics/runtime";
+import {
+  active,
+  applyChar as applyAscentChar,
+  clearPlatform,
+  jumpProgress,
+  refill,
+  type Platform,
+} from "./modes/ascent";
+import { bandTheme, PLATFORMS_PER_BAND } from "@/data/bands";
 import { createContext, createState, refreshStats, type RunConfig } from "./state";
-import { DT, MAX_FRAME_MS, MAX_STEPS, STALL_MS, scoreDecode, step } from "./step";
-import { applyChar } from "./targeting";
-import type { EngineContext, EngineEvent, GameState, Transmission } from "./types";
+import { DT, MAX_FRAME_MS, MAX_STEPS, STALL_MS, step } from "./step";
+import type { EngineContext, EngineEvent, GameState } from "./types";
 
 /**
  * The snapshot React sees.
@@ -20,33 +28,43 @@ import type { EngineContext, EngineEvent, GameState, Transmission } from "./type
 export interface HudSnapshot {
   readonly phase: GameState["phase"];
   readonly mode: GameState["mode"];
-  readonly wave: number;
-  readonly waveClockMs: number;
+
+  // ---- Ascent ----------------------------------------------------------
+  readonly height: number;
+  readonly band: number;
+  readonly bandName: string;
+  /** Platforms into the current band, for the band progress readout. */
+  readonly bandProgress: number;
   readonly shields: number;
   readonly maxShields: number;
+  /** Distance to the flood, 0..1 of the maximum. What "how much trouble" looks like. */
+  readonly gap: number;
   readonly combo: number;
   readonly comboBest: number;
   readonly score: number;
+  /** 0..1 across the active word. Drives the climber's crouch. */
+  readonly charge: number;
+  readonly climberPhase: string;
+  /** 0..1 through the current leap. */
+  readonly jump: number;
+  /** The visible platforms, active first. */
+  readonly platforms: readonly Platform[];
+  /** Set when the player has missed the same character enough to need help. */
+  readonly hintChar: string | null;
+
+  // ---- shared ----------------------------------------------------------
   readonly wpm: number;
   readonly accuracy: number;
-  readonly decoded: number;
   readonly relicIds: readonly string[];
   readonly draft: readonly string[] | null;
-  /** Sprint and Zen: the target text and how far through it the player is. */
+
+  // ---- Sprint and Zen --------------------------------------------------
   readonly targets: readonly string[];
   readonly wordIndex: number;
   readonly charIndex: number;
-  /** What the player has actually typed in the current word, for rendering. */
-  readonly typedInWord: readonly string[];
-  /**
-   * What was typed in every word so far, indexed by word.
-   *
-   * The surface needs this for the words BEHIND the cursor, not just the
-   * current one: without it every finished word renders as though it had
-   * never been typed, and the player cannot see their own progress.
-   */
   readonly typedWords: readonly (readonly string[])[];
   readonly timeLeftMs: number | null;
+
   readonly rev: number;
 }
 
@@ -57,12 +75,11 @@ export interface RunResult {
   corpusId: string;
   startedAt: number;
   metrics: TypingMetrics;
-  onslaught?: {
-    wave: number;
+  ascent?: {
+    height: number;
+    band: number;
     score: number;
     comboBest: number;
-    decoded: number;
-    impacted: number;
     relics: string[];
   };
   layoutId: string;
@@ -74,6 +91,8 @@ export interface EngineOptions extends RunConfig {
 }
 
 const HUD_INTERVAL_MS = 100;
+
+const EMPTY_PLATFORMS: readonly Platform[] = [];
 
 /**
  * How much recent typing Zen's live speed is measured over. Long enough to
@@ -103,8 +122,8 @@ export class GameEngine {
   private layoutId: string;
   private onEvent?: (event: EngineEvent) => void;
 
-  /** Bursts drained by the particle layer each frame. */
-  private bursts: { x: number; y: number; z: number; kind: string }[] = [];
+  /** Landing and error bursts drained by the particle layer each frame. */
+  private bursts: { kind: string; strength: number }[] = [];
 
   private startedAtWall = 0;
   private startedAtPerf: number | null = null;
@@ -112,6 +131,14 @@ export class GameEngine {
   private wpmUnit: WpmUnit;
   /** Set when the current word has had a mistake, so "perfect" is knowable. */
   private wordDirty = false;
+  /** The character the player keeps missing, once they have missed it enough. */
+  private hintChar: string | null = null;
+  /** Previous combo and shield counts, so a change can be emitted as an event. */
+  private lastCombo = 0;
+  private lastShields = 0;
+  /** Sprint and Zen word counters, for the readout. */
+  private wordsDone = 0;
+  private perfectWords = 0;
   private invalidReasons = new Set<string>();
 
   constructor(options: EngineOptions) {
@@ -126,7 +153,10 @@ export class GameEngine {
     this.wpmUnit = corpus.wpmUnit;
 
     refreshStats(this.state, this.runtime);
-    this.state.shields = this.state.stats.maxShields;
+    if (this.state.ascent) {
+      this.state.ascent.shields = this.state.stats.maxShields;
+      refill(this.state.ascent, this.ascentCtx());
+    }
 
     const targets = this.buildTargets();
     this.recorder = new KeystrokeRecorder(targets, 0);
@@ -144,7 +174,9 @@ export class GameEngine {
    * every formula.
    */
   private buildTargets(): string[] {
-    if (this.state.mode === "onslaught") return [];
+    // Ascent builds its targets as it climbs, one per platform, so there is
+    // no fixed list up front.
+    if (this.state.mode === "ascent") return [];
 
     const corpus = getCorpus(this.config.corpusId);
 
@@ -161,7 +193,7 @@ export class GameEngine {
       Math.max(60, Math.ceil(((this.config.durationMs ?? 30_000) / 60_000) * 220));
 
     const words: string[] = [];
-    for (let i = 0; i < need; i++) words.push(this.ctx.drawWord(0));
+    for (let i = 0; i < need; i++) words.push(this.ctx.drawWord(9, i + 3, 0));
     return words.map((w, i) => (i === need - 1 ? w : `${w} `));
   }
 
@@ -200,29 +232,40 @@ export class GameEngine {
         word.length = 0;
       }
     }
-    const typedInWord = typedWords[this.recorder.wordIndex] ?? [];
+
+    const ascent = s.ascent;
 
     return {
       phase: s.phase,
       mode: s.mode,
-      wave: s.wave,
-      waveClockMs: Math.max(0, s.waveClock),
-      shields: s.shields,
+
+      height: ascent?.height ?? 0,
+      band: ascent?.band ?? 1,
+      bandName: bandTheme(ascent?.band ?? 1).name,
+      bandProgress: (ascent?.height ?? 0) % PLATFORMS_PER_BAND,
+      shields: ascent?.shields ?? 0,
       maxShields: s.stats.maxShields,
-      combo: s.combo,
-      comboBest: s.comboBest,
-      score: s.score,
+      gap: ascent ? ascent.gap / s.stats.gapMax : 1,
+      combo: ascent?.combo ?? 0,
+      comboBest: ascent?.comboBest ?? 0,
+      score: ascent?.score ?? 0,
+      charge: ascent?.charge ?? 0,
+      climberPhase: ascent?.phase ?? "grounded",
+      jump: ascent ? jumpProgress(ascent) : 1,
+      platforms: ascent?.visible ?? EMPTY_PLATFORMS,
+      hintChar: this.hintChar,
+
       wpm: metrics.wpm,
       accuracy: metrics.accuracy,
-      decoded: s.decoded,
       relicIds: s.relics.map((r) => r.id),
       draft: s.draft,
+
       targets: this.targets,
       wordIndex: this.recorder.wordIndex,
       charIndex: this.recorder.charIndex,
-      typedInWord,
       typedWords,
       timeLeftMs: this.timeLeftMs(),
+
       rev: this.rev,
     };
   }
@@ -329,7 +372,7 @@ export class GameEngine {
 
   /** True when the mode should begin without waiting for a keystroke. */
   get startsImmediately(): boolean {
-    return this.state.mode === "onslaught";
+    return this.state.mode === "ascent";
   }
 
   start(now: number): void {
@@ -339,7 +382,7 @@ export class GameEngine {
     this.startedAtPerf = now;
     this.nowRef = now;
     this.recorder.start(now);
-    this.emit({ type: "waveStart", wave: this.state.wave });
+    this.emit({ type: "bandStart", band: this.state.ascent?.band ?? 1 });
     this.publish(true);
   }
 
@@ -369,7 +412,11 @@ export class GameEngine {
     if (this.state.phase === "over") return;
     this.endedAtPerf = now;
     this.state.phase = "over";
-    this.emit({ type: "gameOver", score: this.state.score, wave: this.state.wave });
+    this.emit({
+      type: "gameOver",
+      score: this.state.ascent?.score ?? 0,
+      height: this.state.ascent?.height ?? 0,
+    });
     this.publish(true);
   }
 
@@ -472,8 +519,8 @@ export class GameEngine {
     if (this.state.phase !== "running") return;
     this.nowRef = now;
 
-    if (this.state.mode === "onslaught") {
-      this.handleOnslaughtChar(char, now, code, synthetic);
+    if (this.state.mode === "ascent") {
+      this.handleAscentChar(char, now, code, synthetic);
     } else {
       this.handleTextChar(char, now, code, synthetic);
     }
@@ -488,16 +535,17 @@ export class GameEngine {
       this.wordDirty = true;
       this.emit({
         type: "mistype",
-        entityId: null,
         expected: event.expected ?? "",
         actual: char,
+        charged: false,
+        hint: false,
       });
     }
-    this.emit({ type: "keystroke", correct: event.correct, entityId: null });
+    this.emit({ type: "keystroke", correct: event.correct });
 
     if (this.recorder.wordIndex !== before) {
-      this.state.decoded++;
-      if (!this.wordDirty) this.state.perfect++;
+      this.wordsDone++;
+      if (!this.wordDirty) this.perfectWords++;
       this.wordDirty = false;
     }
 
@@ -513,81 +561,126 @@ export class GameEngine {
     }
   }
 
-  private handleOnslaughtChar(
+  /**
+   * Applies a produced character to the climb.
+   *
+   * Recorded against the platform index, which is dense from zero — so it
+   * maps straight onto the target list the analytics layer wants, with none
+   * of the sparse-array padding the radar mode needed. That is also why
+   * Ascent can feed career statistics where the radar could not: one word at
+   * a time means the expected character is never ambiguous.
+   */
+  private handleAscentChar(
     char: string,
     now: number,
     code: string | null,
     synthetic: boolean,
   ): void {
-    const outcome = applyChar(this.state, char);
-    const entity = outcome.entity;
+    const ascent = this.state.ascent;
+    if (!ascent) return;
 
-    // Onslaught records against the entity's own word, since the player
-    // chooses which transmission to answer rather than moving through one
-    // body of text.
-    const charIndex = entity ? Math.max(0, entity.typed - 1) : 0;
-    const wordIndex = entity ? entity.id : -1;
+    const platform = active(ascent);
+    if (!platform) return;
 
-    if (outcome.kind === "mistype") {
-      this.recorder.insertAt(wordIndex, charIndex + 1, outcome.expected, char, {
-        t: now,
-        code,
-        synthetic,
-      });
-      this.wordDirty = true;
-      if (this.state.combo > 0) {
-        const at = this.state.combo;
-        this.state.combo = 0;
-        this.state.comboIdleMs = 0;
-        this.emit({ type: "comboBreak", at });
-      }
-      this.emit({
-        type: "mistype",
-        entityId: entity?.id ?? null,
-        expected: outcome.expected ?? "",
-        actual: char,
-      });
-      this.emit({ type: "keystroke", correct: false, entityId: entity?.id ?? null });
-      return;
-    }
+    const charIndex = platform.typed;
+    const expected = platform.word[charIndex] ?? null;
 
-    if (outcome.kind === "ignored" || !entity) return;
-
-    this.recorder.insertAt(wordIndex, charIndex, outcome.expected, char, {
+    // Recorded before the outcome is applied, so the expected character is
+    // the one that was actually being asked for.
+    this.recorder.insertAt(platform.index, charIndex, expected, char, {
       t: now,
       code,
       synthetic,
     });
-    this.emit({ type: "keystroke", correct: true, entityId: entity.id });
 
-    if (outcome.kind === "lock") {
-      this.emit({ type: "lock", entity });
-      return;
+    // The targets array grows alongside the platforms, so the metrics layer
+    // sees exactly the words that were asked for.
+    while (this.targets.length <= platform.index) {
+      this.targets.push(
+        ascent.visible.find((p) => p.index === this.targets.length)?.word ?? "",
+      );
+    }
+    this.targets[platform.index] = platform.word;
+
+    const outcome = applyAscentChar(ascent, this.ascentCtx(), char, now);
+
+    switch (outcome.kind) {
+      case "progress":
+        this.hintChar = null;
+        this.emit({ type: "keystroke", correct: true });
+        this.emit({ type: "progress", word: platform.word, typed: platform.typed });
+        break;
+
+      case "cleared": {
+        this.hintChar = null;
+        this.emit({ type: "keystroke", correct: true });
+
+        const word = platform.word;
+        const before = ascent.shields;
+        const result = clearPlatform(ascent, this.ascentCtx(), outcome.perfect);
+
+        this.emit({ type: "cleared", word, perfect: outcome.perfect, height: ascent.height });
+        if (ascent.shields > before) {
+          this.emit({ type: "shieldGained", total: ascent.shields });
+        }
+        if (result.bandChanged) {
+          refreshStats(this.state, this.runtime);
+          this.emit({ type: "bandStart", band: ascent.band });
+          // A band boundary is where the draft happens. It is a phase rather
+          // than a modal so the loop can hold the world still behind it.
+          this.state.phase = "draft";
+        }
+        break;
+      }
+
+      case "error": {
+        this.hintChar = outcome.hint ? outcome.expected : null;
+        this.emit({ type: "keystroke", correct: false });
+        this.emit({
+          type: "mistype",
+          expected: outcome.expected,
+          actual: char,
+          charged: outcome.charged,
+          hint: outcome.hint,
+        });
+        if (outcome.charged) {
+          if (ascent.combo === 0 && this.lastCombo > 0) {
+            this.emit({ type: "comboBreak", at: this.lastCombo });
+          }
+          if (ascent.shields < this.lastShields) {
+            this.emit({ type: "shieldLost", remaining: ascent.shields });
+          }
+        }
+        break;
+      }
+
+      case "skipped":
+        // The softlock escape fired. The player is told, because silently
+        // handing them a character they could not type would be baffling.
+        this.hintChar = null;
+        this.emit({ type: "skipped", expected: outcome.expected });
+        break;
+
+      case "ignored":
+        break;
     }
 
-    if (outcome.kind === "decode") {
-      const perfect = !this.wordDirty;
-      const ms = this.state.simTime - entity.spawnedAt;
+    this.lastCombo = ascent.combo;
+    this.lastShields = ascent.shields;
+  }
 
-      entity.status = "decoded";
-      this.state.decoded++;
-      if (perfect) this.state.perfect++;
-      this.state.activeId = null;
-      this.state.comboIdleMs = 0;
-
-      this.state.score += scoreDecode(this.state, entity.word.length, perfect);
-      this.state.combo = Math.min(this.state.combo + 1, this.state.stats.comboCap);
-      this.state.comboBest = Math.max(this.state.comboBest, this.state.combo);
-
-      this.bursts.push({ x: entity.x, y: entity.y, z: entity.z, kind: entity.kind });
-      this.emit({ type: "decoded", entity, perfect, ms });
-      this.wordDirty = false;
-    }
+  /** The context the ascent core draws words through. */
+  private ascentCtx() {
+    return {
+      drawWord: (band: number, index: number) =>
+        this.ctx.drawWord(band, index, this.state.stats.lengthBias),
+      rng: this.ctx.rngSpawn,
+    };
   }
 
   handleBackspace(now: number, wordDelete = false): void {
     if (this.state.phase !== "running") return;
-    if (this.state.mode === "onslaught") return; // no backspace on the field
+    if (this.state.mode === "ascent") return; // a platform word is retried, not edited
     this.nowRef = now;
 
     const target = this.targets[this.recorder.wordIndex] ?? "";
@@ -598,7 +691,10 @@ export class GameEngine {
       ? this.recorder.deleteWord({ t: now })
       : this.recorder.backspace({ t: now });
 
-    if (event && wasWrong) this.emit({ type: "correction", entityId: null });
+    // A correction is not an engine event any more: nothing in the climb
+    // reacts to one, and Sprint scores it purely through the keystroke log.
+    void wasWrong;
+    void event;
     this.publish(true);
   }
 
@@ -618,7 +714,7 @@ export class GameEngine {
 
   openDraft(): void {
     if (this.state.phase !== "draft") return;
-    this.state.draft = draftRelics(this.state.relics, this.state.wave, this.ctx.rngDraft);
+    this.state.draft = draftRelics(this.state.relics, this.state.ascent?.band ?? 1, this.ctx.rngDraft);
     if (this.state.draft.length === 0) {
       // Nothing left to offer: skip the draft rather than showing an empty one.
       this.resumeFromDraft();
@@ -643,29 +739,32 @@ export class GameEngine {
   private resumeFromDraft(): void {
     this.state.draft = null;
     this.state.phase = "running";
-    this.state.waveClock = this.state.stats.waveDurationMs;
     this.accumulator = 0;
-    this.emit({ type: "waveStart", wave: this.state.wave });
+    this.emit({ type: "bandStart", band: this.state.ascent?.band ?? 1 });
     this.publish(true);
   }
 
   // ---- output -----------------------------------------------------------
 
-  drainBursts(): { x: number; y: number; z: number; kind: string }[] {
+  drainBursts(): { kind: string; strength: number }[] {
     if (this.bursts.length === 0) return [];
     const out = this.bursts;
     this.bursts = [];
     return out;
   }
 
-  get entities(): readonly Transmission[] {
-    return this.state.entities;
+  /** The visible platforms, active first. */
+  get platforms(): readonly Platform[] {
+    return this.state.ascent?.visible ?? EMPTY_PLATFORMS;
   }
 
   /** Builds the full result. Called once, when the run ends. */
   result(): RunResult {
     const metrics = computeMetrics(this.recorder.log, {
-      targets: this.state.mode === "onslaught" ? this.onslaughtTargets() : this.targets,
+      // Ascent's platform indices are dense, so the target list it built as
+      // it climbed is already exactly what the metrics layer wants. The radar
+      // mode needed a sparse-array padding hack here; that is now gone.
+      targets: this.targets,
       durationMs: this.elapsedMs(),
       pausedMs: this.recorder.pausedMs,
       charsPerWord: CHARS_PER_WORD[this.wpmUnit],
@@ -681,40 +780,18 @@ export class GameEngine {
       startedAt: this.startedAtWall,
       metrics,
       layoutId: this.layoutId,
-      ...(this.state.mode === "onslaught"
+      ...(this.state.ascent
         ? {
-            onslaught: {
-              wave: this.state.wave,
-              score: this.state.score,
-              comboBest: this.state.comboBest,
-              decoded: this.state.decoded,
-              impacted: this.state.impacted,
+            ascent: {
+              height: this.state.ascent.height,
+              band: this.state.ascent.band,
+              score: this.state.ascent.score,
+              comboBest: this.state.ascent.comboBest,
               relics: this.state.relics.map((r) => r.id),
             },
           }
         : {}),
     };
-  }
-
-  /**
-   * Reconstructs the target list for an Onslaught run.
-   *
-   * Keystrokes there are recorded against entity ids rather than positions in
-   * a text, so the analytics layer needs a sparse array indexed the same way.
-   */
-  private onslaughtTargets(): string[] {
-    const out: string[] = [];
-    for (const k of this.recorder.log) {
-      if (k.wordIndex < 0) continue;
-      if (out[k.wordIndex] === undefined) out[k.wordIndex] = "";
-      if (k.kind === "insert" && k.expected !== null) {
-        const existing = out[k.wordIndex];
-        if (existing.length <= k.charIndex) {
-          out[k.wordIndex] = existing.padEnd(k.charIndex, " ") + k.expected;
-        }
-      }
-    }
-    return out;
   }
 
   get keystrokeLog() {
@@ -723,22 +800,30 @@ export class GameEngine {
 }
 
 /** Compares only the fields a HUD renders, so a stable HUD costs no renders. */
+/** Compares only the fields a HUD renders, so a stable HUD costs no renders. */
 function hudChanged(a: HudSnapshot, b: HudSnapshot): boolean {
   return (
     a.phase !== b.phase ||
-    a.wave !== b.wave ||
+    a.height !== b.height ||
+    a.band !== b.band ||
     a.shields !== b.shields ||
     a.maxShields !== b.maxShields ||
     a.combo !== b.combo ||
     a.score !== b.score ||
-    a.decoded !== b.decoded ||
+    a.hintChar !== b.hintChar ||
+    a.draft !== b.draft ||
+    a.relicIds.length !== b.relicIds.length ||
+    // The crouch and the leap are written straight to CSS custom properties
+    // by the render loop, so they are quantised hard here -- React never
+    // needs to see them at animation resolution.
+    Math.round(a.charge * 8) !== Math.round(b.charge * 8) ||
+    Math.round(a.gap * 40) !== Math.round(b.gap * 40) ||
     Math.round(a.wpm) !== Math.round(b.wpm) ||
     Math.round(a.accuracy * 10) !== Math.round(b.accuracy * 10) ||
     a.wordIndex !== b.wordIndex ||
     a.charIndex !== b.charIndex ||
-    a.draft !== b.draft ||
-    a.relicIds.length !== b.relicIds.length ||
-    Math.floor((a.timeLeftMs ?? 0) / 100) !== Math.floor((b.timeLeftMs ?? 0) / 100) ||
-    Math.floor(a.waveClockMs / 250) !== Math.floor(b.waveClockMs / 250)
+    a.platforms[0]?.index !== b.platforms[0]?.index ||
+    a.platforms[0]?.typed !== b.platforms[0]?.typed ||
+    Math.floor((a.timeLeftMs ?? 0) / 100) !== Math.floor((b.timeLeftMs ?? 0) / 100)
   );
 }

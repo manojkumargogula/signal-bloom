@@ -14,6 +14,17 @@ changes can be checked against the actual game rather than only against tests.
   cleared.
 - `history.mjs` — plays two runs back to back, since the trend only exists
   after the second one.
+- `ascent.mjs` — plays the climb: reads the active word from the DOM, asserts
+  a single keystroke visibly moves the climber, mistypes on purpose and checks
+  it costs one shield without advancing, then climbs a full band to reach the
+  relic draft.
+- `align.mjs` — measures the climber against the platform it is standing on.
+  Written because three separate geometry bugs shipped past both the types and
+  the tests: the climber hung under its platform, sat 38px off-centre because
+  a percentage `translate` does not resolve on an `<svg>` the way it does on a
+  div, and floated 17px up because two different slab heights were hardcoded
+  in two places. None of those are visible to a type checker.
+- `repeat.mjs` — holds one key down and asserts exactly one character lands.
 - `focus.mjs` — types from every starting focus state, including with focus
   stolen by another element and dropped to the body. Every other test had the
   capture input focused, which is exactly why the "nothing gets typed" bug

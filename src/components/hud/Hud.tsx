@@ -66,28 +66,65 @@ const Shields = memo(function Shields({ shields, max }: { shields: number; max: 
   );
 });
 
+/**
+ * How close the water is.
+ *
+ * Rendered as discrete segments rather than a smooth bar. A continuous bar
+ * would be one more thing moving on screen, and a player under pressure reads
+ * "two segments left" faster than they read a bar's length -- which is also
+ * what makes this legible with reduced motion on.
+ */
+const Water = memo(function Water({ gap }: { gap: number }) {
+  const segments = 8;
+  const filled = Math.max(0, Math.min(segments, Math.round(gap * segments)));
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="label">Clearance</span>
+      <div
+        className="flex items-center gap-[3px] pt-[3px]"
+        role="img"
+        aria-label={`${filled} of ${segments} clearance above the water`}
+      >
+        {Array.from({ length: segments }, (_, i) => (
+          <span
+            key={i}
+            className={
+              i < filled
+                ? filled <= 2
+                  ? "h-3.5 w-1.5 bg-[var(--fault)]"
+                  : "h-3.5 w-1.5 bg-[var(--amber)]"
+                : "h-3.5 w-1.5 border border-[var(--line-strong)]"
+            }
+          />
+        ))}
+      </div>
+    </div>
+  );
+});
+
 export const Hud = memo(function Hud({ snapshot }: { snapshot: HudSnapshot }) {
-  const isOnslaught = snapshot.mode === "onslaught";
+  const isAscent = snapshot.mode === "ascent";
   const seconds = snapshot.timeLeftMs === null ? null : Math.ceil(snapshot.timeLeftMs / 1000);
 
   return (
     <div className="flex w-full items-start justify-between gap-8">
       <div className="flex items-start gap-8">
-        {isOnslaught ? (
+        {isAscent ? (
           <>
-            <Channel label="Wave" value={String(snapshot.wave)} size="lg" accent />
+            <Channel label="Height" value={String(snapshot.height)} size="lg" accent />
             <Channel label="Score" value={snapshot.score.toLocaleString()} size="lg" />
             <Channel
               label="Combo"
               value={snapshot.combo > 0 ? `${snapshot.combo}×` : "—"}
             />
+            <Channel label="Band" value={snapshot.bandName} />
           </>
         ) : (
           <>
             {seconds !== null && (
               <Channel label="Time" value={`${seconds}`} size="lg" accent />
             )}
-            <Channel label="Words" value={String(snapshot.decoded)} size="lg" />
+            <Channel label="Words" value={String(snapshot.wordIndex)} size="lg" />
           </>
         )}
       </div>
@@ -95,7 +132,12 @@ export const Hud = memo(function Hud({ snapshot }: { snapshot: HudSnapshot }) {
       <div className="flex items-start gap-8">
         <Channel label="WPM" value={String(Math.round(snapshot.wpm))} size="lg" accent />
         <Channel label="Accuracy" value={`${snapshot.accuracy.toFixed(1)}%`} />
-        {isOnslaught && <Shields shields={snapshot.shields} max={snapshot.maxShields} />}
+        {isAscent && (
+          <>
+            <Shields shields={snapshot.shields} max={snapshot.maxShields} />
+            <Water gap={snapshot.gap} />
+          </>
+        )}
       </div>
     </div>
   );

@@ -203,84 +203,293 @@ html:has(body[data-scroll="true"]) {
   border: 0;
 }
 
-/* ------------------------------------------------------ transmissions ---- */
+/* ------------------------------------------------------------ the climb ---- */
 
 /*
- * Depth is conveyed by these eight font-size rungs, not by a CSS scale.
- * Scaling a promoted compositor layer stretches its cached bitmap and the
- * text goes soft, which would defeat the whole reason for rendering the
- * field as DOM instead of canvas. See src/render/stage.ts.
+ * Band colours arrive as custom properties set on the board by the renderer,
+ * so a band change is a handful of property writes rather than a class swap
+ * or a re-render.
  */
-.transmission {
+.board {
+  --slab: #1a1208;
+  --slab-edge: #ffb627;
+  --word: #f4ead8;
+  --word-done: #ffb627;
+  --water: #3a2a14;
+  --water-foam: #c98c14;
+}
+
+.platform {
   position: absolute;
   top: 0;
   left: 0;
+  /* Centring is part of the transform the renderer writes, not a separate
+     `translate` property -- see the note in render/ascent/stage.ts. */
   will-change: transform, opacity;
   transform: translate3d(-9999px, 0, 0);
+  contain: layout style paint;
+}
+
+.platform-slab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Height is pinned, not derived from the font, because the climber has to
+     stand on its top face and the renderer needs that number without reading
+     a layout property. Kept in step with SLAB_HEIGHT in render/ascent/stage.ts. */
+  height: 52px;
+  padding: 0 0.9em;
+  background: var(--slab);
+  border-bottom: 3px solid color-mix(in oklab, var(--slab) 60%, black);
+  border-radius: 2px;
+}
+
+.platform-word {
   font-family: var(--font-mono);
   font-variant-ligatures: none;
   font-feature-settings: "liga" 0, "calt" 0;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   white-space: nowrap;
-  contain: layout style paint;
-  translate: -50% -50%;
-  color: var(--fg);
-  /* A dark halo, so the word stays legible over any part of the field. A
-     text-shadow rather than a filter or backdrop-filter: both of those force
-     the layer to repaint every frame. */
-  text-shadow:
-    0 0 1px var(--bg),
-    0 0 10px color-mix(in oklab, var(--bg) 90%, transparent),
-    0 1px 18px color-mix(in oklab, var(--bg) 75%, transparent);
+  color: var(--word);
 }
 
-.transmission[data-rung="0"] { font-size: 0.95rem; }
-.transmission[data-rung="1"] { font-size: 1.08rem; }
-.transmission[data-rung="2"] { font-size: 1.22rem; }
-.transmission[data-rung="3"] { font-size: 1.38rem; }
-.transmission[data-rung="4"] { font-size: 1.56rem; }
-.transmission[data-rung="5"] { font-size: 1.76rem; }
-.transmission[data-rung="6"] { font-size: 2.0rem; }
-.transmission[data-rung="7"] { font-size: 2.28rem; }
-
-.transmission-done {
-  color: var(--amber);
+.platform-letter[data-state="done"] {
+  color: var(--word-done);
 }
 
-.transmission-rest {
-  color: var(--fg);
+.platform-letter[data-state="wrong"] {
+  /* Colour only. The glyph never moves: any displacement above a pixel
+     destroys legibility at exactly the moment the player needs to read the
+     letter they just got wrong. */
+  color: var(--bg);
+  background: var(--fault);
+  border-radius: 1px;
 }
 
-/* Unlocked transmissions recede so the locked one reads as the target. Still
-   above 4.5:1 — this is emphasis, not dimming into illegibility, which is the
-   usual mistake on typing sites. */
-.transmission[data-active="false"] .transmission-rest {
-  color: var(--type-pending);
+/*
+ * The salience ladder.
+ *
+ * Rank 0 is active, 1 and 2 carry their words, 3 is a textless slab that is
+ * scenery. De-emphasis runs through size, weight and letter-spacing — and
+ * NEVER through opacity or blur. Opacity is the standard mistake because it
+ * trades salience for legibility one for one, and upcoming words are real
+ * content that has to stay readable. Their contrast against the slab is the
+ * same at every rank; only their prominence changes.
+ */
+.platform[data-rank="0"] .platform-word {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
 }
 
-/* The locked target has to be unmistakable at a glance: the player needs to
-   know where their keystrokes are going without hunting for it. */
-.transmission[data-active="true"] {
+/*
+ * The active platform has to be unmistakable against five different skies,
+ * two of which are bright. An amber outline vanishes on the dawn band, so the
+ * emphasis is carried by a ring in the WORD colour -- the value guaranteed to
+ * contrast with the slab in every theme -- with the accent inside it.
+ */
+.platform[data-rank="0"] .platform-slab {
+  outline: 2px solid var(--word);
+  outline-offset: 3px;
+  box-shadow:
+    0 0 0 1px var(--slab),
+    0 0 0 5px color-mix(in oklab, var(--slab-edge) 70%, transparent),
+    0 6px 20px -6px color-mix(in oklab, black 55%, transparent);
+}
+
+.platform[data-rank="1"] .platform-word {
+  font-size: 1.32rem;
+  font-weight: 450;
+}
+
+.platform[data-rank="2"] .platform-word {
+  font-size: 1.18rem;
+  font-weight: 400;
+}
+
+/* The ledge underfoot. Wide enough to stand on and read as ground, with no
+   word, so it never competes with the platform being typed. */
+.ledge .platform-slab {
+  width: 7rem;
+  /* Kept in step with LEDGE_HEIGHT in render/ascent/stage.ts. */
+  height: 18px;
+  padding: 0;
+  background: color-mix(in oklab, var(--slab) 85%, black);
+  border-bottom-color: color-mix(in oklab, var(--slab) 40%, black);
+}
+
+/* Rank 3 is scenery. A word slab with its word hidden reads as a bug -- an
+   unexplained floating box -- so it becomes a narrow ledge instead, which
+   tells the player the route continues without pretending to be readable. */
+.platform[data-rank="3"] .platform-word {
+  display: none;
+}
+
+.platform[data-rank="3"] .platform-slab {
+  width: 3.5rem;
+  height: 0.5rem;
+  padding: 0;
+  opacity: 0.55;
+}
+
+.platform[data-pickup="true"] .platform-slab::after {
+  content: "";
+  position: absolute;
+  top: -1.5em;
+  width: 0.7em;
+  height: 0.7em;
+  background: var(--slab-edge);
+  clip-path: polygon(50% 100%, 0 35%, 25% 0, 50% 25%, 75% 0, 100% 35%);
+}
+
+/* ----------------------------------------------------------- the climber ---- */
+
+.climber {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 58px;
+  height: 76px;
+  /* No `translate` here on purpose. The renderer centres the climber in
+     explicit pixels, and leaving a percentage translate in place applied the
+     centring twice -- 76px off instead of 38. Keep the offset in one place. */
+  will-change: transform;
+  overflow: visible;
   z-index: 2;
 }
 
-.transmission[data-active="true"]::before {
+.climber-body {
+  /* Feet stay planted while the body compresses, so a crouch reads as weight
+     rather than as the whole character shrinking. */
+  transform-origin: 50% 100%;
+  transform-box: fill-box;
+}
+
+/*
+ * The climber has to read against five different skies, some of them light.
+ * So the body takes the slab colour -- the one dark value each band defines
+ * and the same one the words are read against -- with the accent on the hat
+ * and pack. A silhouette that works on paper works on night sky too, which a
+ * light-coloured character would not.
+ */
+.climber-torso,
+.climber-head {
+  fill: var(--slab);
+}
+
+.climber-hat,
+.climber-pack {
+  fill: var(--slab-edge);
+}
+
+.climber-leg,
+.climber-arm {
+  fill: color-mix(in oklab, var(--slab) 80%, black);
+}
+
+/* A hairline of the word colour, so the silhouette separates from a dark sky
+   as well as from a bright one. */
+.climber-body {
+  stroke: color-mix(in oklab, var(--word) 55%, transparent);
+  stroke-width: 0.4;
+  paint-order: stroke fill;
+}
+
+/* Limbs swing with the arc, driven by the --swing property the renderer
+   writes. Cheap, and it is the difference between a leap and a slide. */
+.climber-leg-front {
+  transform: rotate(calc(var(--swing, 0) * -22deg));
+  transform-origin: 50% 0;
+  transform-box: fill-box;
+}
+
+.climber-leg-back {
+  transform: rotate(calc(var(--swing, 0) * 26deg));
+  transform-origin: 50% 0;
+  transform-box: fill-box;
+}
+
+.climber-arm-front {
+  transform: rotate(calc(var(--swing, 0) * 34deg));
+  transform-origin: 50% 0;
+  transform-box: fill-box;
+}
+
+.climber-arm-back {
+  transform: rotate(calc(var(--swing, 0) * -30deg));
+  transform-origin: 50% 0;
+  transform-box: fill-box;
+}
+
+/* ------------------------------------------------------------- the flood ---- */
+
+.flood {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  will-change: height;
+  /* Deep at the bottom, translucent at the surface, so it reads as water
+     rather than as a slab of colour -- and so the ridges behind it stay
+     faintly visible instead of being cut off by a hard edge. */
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--water) 55%, transparent) 0%,
+    color-mix(in oklab, var(--water) 88%, transparent) 32%,
+    var(--water) 100%
+  );
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* The surface line, which is the fail state made visible. Kept to a slow, low
+   amplitude sway: this sits in the periphery while the player reads, so it is
+   the one continuous motion the budget allows down there. */
+.flood::before {
   content: "";
   position: absolute;
-  inset: -0.4em -0.7em;
-  border: 1px solid var(--amber);
-  background: color-mix(in oklab, var(--bg) 86%, transparent);
-  z-index: -1;
+  inset: -1px 0 auto 0;
+  height: 3px;
+  background: var(--water-foam);
+  box-shadow: 0 0 12px 2px color-mix(in oklab, var(--water-foam) 45%, transparent);
+  animation: flood-sway 5s ease-in-out infinite;
 }
 
-/* A carrier is the wave's pressure spike and has to read as one instantly. */
-.transmission[data-kind="carrier"] {
-  font-weight: 700;
-  letter-spacing: 0.1em;
+@keyframes flood-sway {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(1.5px); }
 }
 
-.transmission[data-kind="carrier"] .transmission-rest {
-  color: var(--amber);
+@media (prefers-reduced-motion: reduce) {
+  .flood::before { animation: none; }
+}
+
+/* --------------------------------------------------------------- the sky ---- */
+
+.sky {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  /* Never an LCP candidate, so the heading wins largest-contentful-paint
+     rather than the game board. */
+  will-change: transform;
+}
+
+.sky-fallback {
+  position: absolute;
+  inset: 0;
+}
+
+/* Ridge silhouettes, drawn rather than generated, so parallax costs one
+   gradient per layer instead of five more images. */
+.ridge {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  bottom: 0;
+  will-change: transform;
+  pointer-events: none;
 }
 
 /* ------------------------------------------------------------- caret ---- */
@@ -315,19 +524,10 @@ html:has(body[data-scroll="true"]) {
    a phosphor screen, not enough to interfere with the text. Drawn in CSS
    rather than the shader so it stays crisp at device resolution regardless of
    the render scale the shader is running at. */
-.scanlines::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    to bottom,
-    color-mix(in oklab, var(--bg) 55%, transparent) 0 1px,
-    transparent 1px 3px
-  );
-  opacity: calc(var(--phosphor) * 0.5);
-  mix-blend-mode: multiply;
-}
+/* Scanlines are gone from the board: they read as a CRT over an abstract
+   scope, but over illustrated scenery they just muddy it. The vignette stays,
+   because focusing attention toward the middle is exactly what a screen full
+   of words needs. */
 
 /* The vignette that makes it a screen rather than a page. */
 .vignette::before {

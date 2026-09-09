@@ -1,20 +1,22 @@
 import type { Rng } from "./rng";
+import type { AscentState } from "./modes/ascent";
 
 /**
  * Engine state.
  *
  * Two rules govern everything in this file and both are load-bearing:
  *
- * 1. NO PIXELS. Entities live in a virtual space where x and y run -1..1 and
- *    z runs 1 (spawn) to 0 (impact). Only the renderer knows about pixels, so
- *    a resize, a fullscreen transition or a DPI change cannot affect the
- *    simulation. That is what makes those events safe.
+ * 1. NO PIXELS. The world is measured in platform spacings and milliseconds.
+ *    Only the renderer knows about pixels, so a resize, a fullscreen
+ *    transition or a DPI change cannot affect the simulation. That is what
+ *    makes those events safe.
  *
- * 2. NO REACT, NO DOM, NO WINDOW. This module runs in plain Node under test.
- *    An ESLint boundary enforces it.
+ * 2. NO REACT, NO DOM, NO WINDOW. This module runs in plain Node under test,
+ *    and `eslint.config.mjs` has a `no-restricted-imports` rule that enforces
+ *    it at lint time as well.
  */
 
-export type ModeId = "onslaught" | "sprint" | "zen";
+export type ModeId = "ascent" | "sprint" | "zen";
 
 export type GamePhase =
   | "idle"
@@ -23,79 +25,53 @@ export type GamePhase =
   | "paused"
   | "over";
 
-export type TransmissionKind = "normal" | "carrier";
-
-export interface Transmission {
-  id: number;
-  word: string;
-  /** Characters already decoded. */
-  typed: number;
-  /**
-   * Position on the scope, in virtual units the renderer projects.
-   *
-   *   x  bearing, -1..1, mapped to a full turn
-   *   y  radial jitter, -1..1, so contacts at the same bearing do not overlap
-   *   z  range: 1 at the rim, 0 when it breaches the perimeter
-   *
-   * Contacts close on the centre, which is where the player is. That is the
-   * whole reading of the screen, and it is why nothing here is in pixels: the
-   * renderer owns the projection, so a resize cannot disturb the simulation.
-   */
-  x: number;
-  y: number;
-  z: number;
-  /** Previous position, for render interpolation between fixed steps. */
-  prevX: number;
-  prevY: number;
-  prevZ: number;
-  /** Approach rate in z units per second. */
-  speed: number;
-  /** Lateral drift, so the field does not look like falling rain. */
-  drift: number;
-  kind: TransmissionKind;
-  status: "alive" | "decoded" | "impacted";
-  spawnedAt: number;
-}
-
 /**
  * Every tunable the loop reads.
  *
  * Relics change the game by changing these numbers, which is why the loop
- * never needs to know which relics are held.
+ * never needs to know which relics are held. Every field is in the engine's
+ * own units -- platform spacings and milliseconds -- never pixels.
  */
 export interface Stats {
-  spawnIntervalMs: number;
-  approachSpeed: number;
-  maxLive: number;
-  comboCap: number;
-  /** Combo decays after this long without a decode. 0 disables decay. */
-  comboDecayMs: number;
+  /** Flood speed at the start, in platform spacings per second. */
+  floodRise: number;
+  /** Flood speed multiplier per platform cleared. */
+  floodAccel: number;
+  /** The most gap the player can bank, in spacings. */
+  gapMax: number;
+  /** What one charged error costs, in spacings. */
+  errorCost: number;
+
   maxShields: number;
-  waveDurationMs: number;
-  /** Time added to the wave clock for a word decoded without a mistake. */
-  perfectBonusMs: number;
+  /** Probability a band's pickup platform actually carries a shield. */
+  shieldDropChance: number;
+
+  comboCap: number;
+  /** How long a perfect word's flood dip lasts. */
+  perfectDipMs: number;
+  /** How much a perfect word slows the flood. Below 1. */
+  perfectDipFactor: number;
+
   scoreMultiplier: number;
   /** Bias toward longer words: 0 neutral, 1 always the longest available. */
   lengthBias: number;
-  /** Shields refunded when a mistyped character is corrected. */
-  shieldOnCorrection: number;
-  /** Probability that a decoded transmission drops a shield. */
-  shieldDropChance: number;
+  /** Airtime for a leap, in milliseconds. */
+  jumpMs: number;
 }
 
 export const BASE_STATS: Stats = {
-  spawnIntervalMs: 1150,
-  approachSpeed: 0.048,
-  maxLive: 7,
-  comboCap: 50,
-  comboDecayMs: 4000,
+  floodRise: 0.4,
+  floodAccel: 1.023,
+  gapMax: 2.5,
+  errorCost: 0.08,
   maxShields: 3,
-  waveDurationMs: 45_000,
-  perfectBonusMs: 400,
+  shieldDropChance: 1,
+  comboCap: 50,
+  perfectDipMs: 900,
+  perfectDipFactor: 0.82,
   scoreMultiplier: 1,
   lengthBias: 0,
-  shieldOnCorrection: 0,
-  shieldDropChance: 0,
+  jumpMs: 260,
 };
 
 export interface OwnedRelic {
@@ -113,33 +89,15 @@ export interface GameState {
   /** Wall time spent paused, excluded from every metric. */
   pausedMs: number;
 
-  wave: number;
-  waveClock: number;
-
-  entities: Transmission[];
-  /** The transmission the player has locked onto, if any. */
-  activeId: number | null;
-
-  combo: number;
-  comboBest: number;
-  /** Time since the last decode, for combo decay. */
-  comboIdleMs: number;
-  shields: number;
-  score: number;
-
-  decoded: number;
-  impacted: number;
-  /** Transmissions decoded without a single mistyped character. */
-  perfect: number;
+  /**
+   * The climb. Only present in Ascent; the timed modes leave it null so the
+   * loop can skip the whole thing rather than iterating an empty world.
+   */
+  ascent: AscentState | null;
 
   stats: Stats;
   relics: OwnedRelic[];
   draft: string[] | null;
-
-  nextEntityId: number;
-  spawnTimer: number;
-  /** Words remaining in this wave's budget. */
-  spawnBudget: number;
 }
 
 export interface EngineContext {
@@ -147,24 +105,29 @@ export interface EngineContext {
   rngWords: Rng;
   rngDraft: Rng;
   rngEffect: Rng;
-  /** Draws the next word, honouring `lengthBias`. */
-  drawWord: (bias: number) => string;
+  /**
+   * Draws the word for a platform.
+   *
+   * Takes the platform index as well as the band so the chooser can look at
+   * where in the climb it is -- which is what lets it bias toward the
+   * player's own problem bigrams two platforms ahead of where they are.
+   */
+  drawWord: (band: number, index: number, bias: number) => string;
 }
 
 /** Everything the loop can emit. Relics subscribe to these. */
 export type EngineEvent =
-  | { type: "spawn"; entity: Transmission }
-  | { type: "lock"; entity: Transmission }
-  | { type: "keystroke"; correct: boolean; entityId: number | null }
-  | { type: "mistype"; entityId: number | null; expected: string; actual: string }
-  | { type: "correction"; entityId: number | null }
-  | { type: "decoded"; entity: Transmission; perfect: boolean; ms: number }
-  | { type: "impact"; entity: Transmission; shieldsLeft: number }
-  | { type: "waveStart"; wave: number }
-  | { type: "waveEnd"; wave: number; cleared: boolean }
-  | { type: "gameOver"; score: number; wave: number }
-  | { type: "comboBreak"; at: number }
+  | { type: "keystroke"; correct: boolean }
+  | { type: "progress"; word: string; typed: number }
+  | { type: "mistype"; expected: string; actual: string; charged: boolean; hint: boolean }
+  | { type: "skipped"; expected: string }
+  | { type: "cleared"; word: string; perfect: boolean; height: number }
+  | { type: "bandStart"; band: number }
+  | { type: "shieldLost"; remaining: number }
   | { type: "shieldGained"; total: number }
+  | { type: "drowned"; height: number; score: number }
+  | { type: "gameOver"; score: number; height: number }
+  | { type: "comboBreak"; at: number }
   | { type: "tick"; dt: number };
 
 export type EngineEventType = EngineEvent["type"];

@@ -1,15 +1,19 @@
+import { stepAscent } from "./modes/ascent";
 import { makeEffectApi, RelicRuntime } from "./relics/runtime";
-import { liveEntities, refreshStats, spawnTransmission, waveBudget } from "./state";
-import type { EngineContext, EngineEvent, GameState, Transmission } from "./types";
+import type { EngineContext, EngineEvent, GameState } from "./types";
 
 /**
  * One simulation step, of fixed duration.
  *
  * Fixed timestep rather than variable delta, for three reasons: a seeded run
- * has to replay identically, `step(state, DT)` is snapshot-testable, and a
- * 144Hz monitor must not make transmissions arrive faster than they do at
- * 60Hz. Rendering interpolates between steps using each entity's `prev`
- * position, which is what keeps motion smooth on high-refresh displays.
+ * has to replay identically, the step is snapshot-testable, and a 144Hz
+ * monitor must not make the flood rise faster than it does at 60Hz.
+ * Rendering interpolates between steps.
+ *
+ * The radar mode's motion, impact and shield-death block used to be the
+ * unconditional body of this function, which worked for the timed modes only
+ * because they never put anything in the world. Now the world is explicitly
+ * `state.ascent`, and a null world means there is nothing to advance.
  */
 export const DT = 1000 / 60;
 
@@ -31,153 +35,23 @@ export function step(
 ): void {
   if (state.phase !== "running") return;
 
-  const api = makeEffectApi(state, ctx.rngEffect, emit);
-  const seconds = dt / 1000;
-
   state.simTime += dt;
 
-  // ---- combo decay ------------------------------------------------------
-  // Onslaught only. In Sprint and Zen there is nothing chasing the player, so
-  // a decaying combo would just punish thinking.
-  if (state.mode === "onslaught" && state.combo > 0 && state.stats.comboDecayMs > 0) {
-    state.comboIdleMs += dt;
-    if (state.comboIdleMs >= state.stats.comboDecayMs) {
-      const at = state.combo;
-      state.combo = 0;
-      state.comboIdleMs = 0;
-      emit({ type: "comboBreak", at });
-    }
-  }
+  const ascent = state.ascent;
+  if (ascent) {
+    const wasDrowned = ascent.drowned;
+    stepAscent(ascent, dt);
 
-  // ---- entity motion ----------------------------------------------------
-  // Impacts are collected rather than acted on inside the loop. Ending the
-  // run mid-iteration would leave impacted entities in the array and skip
-  // moving the ones after them, so the cleanup below must always run.
-  const impacts: Transmission[] = [];
-
-  for (const entity of state.entities) {
-    if (entity.status !== "alive") continue;
-
-    entity.prevX = entity.x;
-    entity.prevY = entity.y;
-    entity.prevZ = entity.z;
-
-    entity.z -= entity.speed * seconds;
-
-    // Bearing wraps rather than clamping: the scope is a full circle, so a
-    // contact drifting past the far bearing simply comes round the other side.
-    entity.x += entity.drift * seconds;
-    if (entity.x > 1) entity.x -= 2;
-    else if (entity.x < -1) entity.x += 2;
-
-    if (entity.z <= 0) {
-      entity.status = "impacted";
-      state.impacted++;
-      if (state.activeId === entity.id) state.activeId = null;
-      impacts.push(entity);
-    }
-  }
-
-  // Drop finished entities. Splicing in place keeps the array dense so the
-  // renderer can map entity index to a pooled DOM node.
-  for (let i = state.entities.length - 1; i >= 0; i--) {
-    if (state.entities[i].status !== "alive") state.entities.splice(i, 1);
-  }
-
-  for (const entity of impacts) {
-    // An impact always breaks the combo. Emitting the break first means a
-    // relic that softens breaks has already run by the time an impact hook
-    // reads the combo.
-    if (state.combo > 0) {
-      const at = state.combo;
-      state.combo = 0;
-      emit({ type: "comboBreak", at });
-    }
-
-    state.shields -= 1;
-    emit({ type: "impact", entity, shieldsLeft: state.shields });
-  }
-
-  if (state.shields <= 0) {
-    state.phase = "over";
-    emit({ type: "gameOver", score: state.score, wave: state.wave });
-    return;
-  }
-
-  // ---- spawning ---------------------------------------------------------
-  if (state.mode === "onslaught") {
-    state.spawnTimer += dt;
-    const live = liveEntities(state).length;
-
-    if (
-      state.spawnBudget > 0 &&
-      live < state.stats.maxLive &&
-      state.spawnTimer >= state.stats.spawnIntervalMs
-    ) {
-      state.spawnTimer = 0;
-      // One carrier per wave, released once the wave is half spent, so it
-      // lands as a spike rather than as an opening ambush.
-      const budgetUsed = waveBudget(state.wave) - state.spawnBudget;
-      const wantCarrier =
-        state.wave >= 2 &&
-        budgetUsed >= Math.floor(waveBudget(state.wave) / 2) &&
-        !state.entities.some((e) => e.kind === "carrier");
-
-      const entity = spawnTransmission(state, ctx, wantCarrier ? "carrier" : "normal");
-      state.spawnBudget--;
-      emit({ type: "spawn", entity });
-    }
-
-    // ---- wave clock ------------------------------------------------------
-    state.waveClock -= dt;
-
-    const cleared = state.spawnBudget <= 0 && liveEntities(state).length === 0;
-    const expired = state.waveClock <= 0;
-
-    if (cleared || expired) {
-      emit({ type: "waveEnd", wave: state.wave, cleared });
-
-      if (expired && !cleared) {
-        // Running out of time costs a shield rather than ending the run: the
-        // wave clock is pressure, not a second fail state.
-        state.shields -= 1;
-        if (state.shields <= 0) {
-          state.phase = "over";
-          emit({ type: "gameOver", score: state.score, wave: state.wave });
-          return;
-        }
-      }
-
-      state.wave++;
-      state.waveClock = state.stats.waveDurationMs;
-      state.spawnBudget = waveBudget(state.wave);
-      state.spawnTimer = 0;
-      state.entities.length = 0;
-      state.activeId = null;
-
-      refreshStats(state, runtime);
-      state.phase = "draft";
+    if (ascent.drowned && !wasDrowned) {
+      state.phase = "over";
+      emit({ type: "drowned", height: ascent.height, score: ascent.score });
+      emit({ type: "gameOver", score: ascent.score, height: ascent.height });
       return;
     }
   }
 
   emit({ type: "tick", dt });
-  void api;
-}
-
-/**
- * Scores a decoded transmission.
- *
- * Kept beside the step function because score and combo move together, and
- * splitting them across files is how they drift apart.
- */
-export function scoreDecode(
-  state: GameState,
-  wordLength: number,
-  perfect: boolean,
-): number {
-  const comboMultiplier = 1 + state.combo * 0.1;
-  const base = wordLength * 10;
-  const perfectBonus = perfect ? 1.25 : 1;
-  return Math.round(base * comboMultiplier * perfectBonus * state.stats.scoreMultiplier);
+  void ctx;
+  void runtime;
+  void makeEffectApi;
 }

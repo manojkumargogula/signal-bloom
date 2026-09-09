@@ -48,9 +48,10 @@ describe("relic definitions", () => {
       }
       // A relic must never make the game unplayable on its own.
       expect(stats.maxShields).toBeGreaterThan(0);
-      expect(stats.approachSpeed).toBeGreaterThan(0);
-      expect(stats.spawnIntervalMs).toBeGreaterThan(0);
-      expect(stats.maxLive).toBeGreaterThan(0);
+      expect(stats.floodRise).toBeGreaterThan(0);
+      expect(stats.floodAccel).toBeGreaterThan(1);
+      expect(stats.gapMax).toBeGreaterThan(0);
+      expect(stats.errorCost).toBeGreaterThanOrEqual(0);
       expect(stats.comboCap).toBeGreaterThan(0);
     }
   });
@@ -77,8 +78,8 @@ describe("resolveStats", () => {
     expect(resolveStats(BASE_STATS, [{ stat: "comboCap", op: "add", value: 5 }]).comboCap).toBe(55);
     expect(resolveStats(BASE_STATS, [{ stat: "comboCap", op: "mul", value: 2 }]).comboCap).toBe(100);
     // `min` raises to a floor; `max` lowers to a ceiling.
-    expect(resolveStats(BASE_STATS, [{ stat: "maxLive", op: "min", value: 10 }]).maxLive).toBe(10);
-    expect(resolveStats(BASE_STATS, [{ stat: "maxLive", op: "max", value: 4 }]).maxLive).toBe(4);
+    expect(resolveStats(BASE_STATS, [{ stat: "maxShields", op: "min", value: 9 }]).maxShields).toBe(9);
+    expect(resolveStats(BASE_STATS, [{ stat: "maxShields", op: "max", value: 2 }]).maxShields).toBe(2);
   });
 
   it("leaves the base table untouched", () => {
@@ -93,7 +94,7 @@ describe("RelicRuntime", () => {
     const runtime = new RelicRuntime();
     const stats = runtime.rebuild([], BASE_STATS);
     expect(stats).toEqual(BASE_STATS);
-    expect(runtime.hookCount("decoded")).toBe(0);
+    expect(runtime.hookCount("cleared")).toBe(0);
   });
 
   it("is idempotent — rebuilding twice gives the same stats", () => {
@@ -106,16 +107,16 @@ describe("RelicRuntime", () => {
     const second = runtime.rebuild(owned, BASE_STATS);
     expect(second).toEqual(first);
     // And hooks must not accumulate across rebuilds.
-    expect(runtime.hookCount("decoded")).toBe(0);
+    expect(runtime.hookCount("cleared")).toBe(0);
   });
 
   it("does not duplicate hooks when rebuilt", () => {
     const runtime = new RelicRuntime();
-    const owned: OwnedRelic[] = [{ id: "clean-signal", stacks: 1 }];
+    const owned: OwnedRelic[] = [{ id: "long-baseline", stacks: 1 }];
     runtime.rebuild(owned, BASE_STATS);
-    const once = runtime.hookCount("decoded");
+    const once = runtime.hookCount("cleared");
     runtime.rebuild(owned, BASE_STATS);
-    expect(runtime.hookCount("decoded")).toBe(once);
+    expect(runtime.hookCount("cleared")).toBe(once);
   });
 
   it("gives the same stats regardless of the order relics were drafted", () => {
@@ -136,6 +137,14 @@ describe("RelicRuntime", () => {
     const one = runtime.rebuild([{ id: "wide-aperture", stacks: 1 }], BASE_STATS);
     const two = runtime.rebuild([{ id: "wide-aperture", stacks: 2 }], BASE_STATS);
     expect(two.comboCap).toBeGreaterThan(one.comboCap);
+  });
+
+  it("keeps the flood accelerating even at full stacks of everything", () => {
+    // A relic pool that could flatten the acceleration curve would produce a
+    // run that never ends, which is worse than one that ends too soon.
+    const runtime = new RelicRuntime();
+    const everything = RELICS.map((r) => ({ id: r.id, stacks: r.maxStacks }));
+    expect(runtime.rebuild(everything, BASE_STATS).floodAccel).toBeGreaterThan(1);
   });
 });
 
@@ -159,20 +168,24 @@ describe("drafting", () => {
     expect(eligible).not.toContain("swarm-protocol");
   });
 
-  it("respects mutual exclusion in both directions", () => {
-    // "quiet-sector" names the conflict; "swarm-protocol" also names it. The
-    // check has to work whichever one the player already holds.
-    const withQuiet = eligibleRelics([{ id: "quiet-sector", stacks: 1 }], 10).map((r) => r.id);
-    expect(withQuiet).not.toContain("swarm-protocol");
-
-    const withSwarm = eligibleRelics([{ id: "swarm-protocol", stacks: 1 }], 10).map((r) => r.id);
-    expect(withSwarm).not.toContain("quiet-sector");
+  it("respects mutual exclusion in both directions when any relic declares it", () => {
+    // No relic in the pool currently declares an exclusion, so this asserts
+    // the mechanism rather than a specific pair -- if one is added later, the
+    // check already covers it from both sides.
+    for (const relic of RELICS) {
+      for (const other of relic.exclusiveWith ?? []) {
+        expect(eligibleRelics([{ id: relic.id, stacks: 1 }], 10).map((r) => r.id))
+          .not.toContain(other);
+        expect(eligibleRelics([{ id: other, stacks: 1 }], 10).map((r) => r.id))
+          .not.toContain(relic.id);
+      }
+    }
   });
 
-  it("withholds late-game relics on early waves", () => {
-    const wave1 = eligibleRelics([], 1).map((r) => r.id);
-    expect(wave1).not.toContain("swarm-protocol");
-    expect(eligibleRelics([], 8).map((r) => r.id)).toContain("swarm-protocol");
+  it("withholds late-game relics in early bands", () => {
+    const band1 = eligibleRelics([], 1).map((r) => r.id);
+    expect(band1).not.toContain("held-breath");
+    expect(eligibleRelics([], 6).map((r) => r.id)).toContain("held-breath");
   });
 
   it("offers fewer than three when the pool runs dry", () => {
@@ -218,12 +231,15 @@ describe("no relic combination breaks the game", () => {
       }
       expect(stats.maxShields, build).toBeGreaterThan(0);
       expect(stats.maxShields, build).toBeLessThan(40);
-      expect(stats.approachSpeed, build).toBeGreaterThan(0);
-      expect(stats.spawnIntervalMs, build).toBeGreaterThan(50);
-      expect(stats.maxLive, build).toBeGreaterThan(0);
-      expect(stats.maxLive, build).toBeLessThanOrEqual(30);
+      expect(stats.floodRise, build).toBeGreaterThan(0);
+      // The flood must always accelerate, or a run never ends.
+      expect(stats.floodAccel, build).toBeGreaterThan(1);
+      expect(stats.gapMax, build).toBeGreaterThan(0.5);
+      expect(stats.gapMax, build).toBeLessThan(12);
+      expect(stats.errorCost, build).toBeGreaterThanOrEqual(0);
       expect(stats.comboCap, build).toBeGreaterThan(0);
-      expect(stats.waveDurationMs, build).toBeGreaterThan(1000);
+      expect(stats.perfectDipFactor, build).toBeGreaterThan(0);
+      expect(stats.perfectDipFactor, build).toBeLessThanOrEqual(1);
     }
   });
 

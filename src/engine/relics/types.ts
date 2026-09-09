@@ -38,7 +38,16 @@ export interface EffectApi {
   readonly state: Readonly<GameState>;
   readonly stats: Readonly<Stats>;
   grantShield(n: number): void;
-  addWaveTime(ms: number): void;
+  /**
+   * Pushes the flood back down, in platform spacings.
+   *
+   * The base game never does this: reverse motion in the periphery under an
+   * upward-scrolling camera is the readability failure the whole motion
+   * budget exists to prevent, and it turns the flood from a threat into a
+   * yo-yo. A relic is allowed to break that rule precisely because it is a
+   * rule, and breaking it is what makes the relic feel special.
+   */
+  pushFlood(spacings: number): void;
   addScore(n: number): void;
   addCombo(n: number): void;
   setCombo(n: number): void;
@@ -62,7 +71,7 @@ export interface RelicDef {
   /** Cannot be drafted alongside these. */
   exclusiveWith?: string[];
   /** Not offered before this wave. */
-  minWave?: number;
+  minBand?: number;
   /** Hook dispatch order; ties broken by id so it stays deterministic. */
   priority?: number;
   modifiers?: (stacks: number) => StatOp[];

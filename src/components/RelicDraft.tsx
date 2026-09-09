@@ -33,7 +33,7 @@ const RARITY_STYLE: Record<Rarity, { border: string; text: string; label: string
 
 interface RelicDraftProps {
   offers: readonly string[];
-  wave: number;
+  band: number;
   onPick: (id: string) => void;
   onSkip: () => void;
 }
@@ -45,7 +45,7 @@ interface RelicDraftProps {
  * to move their hands to the mouse mid-run. That matters more here than
  * anywhere else in the game, because the draft interrupts a typing flow.
  */
-export function RelicDraft({ offers, wave, onPick, onSkip }: RelicDraftProps) {
+export function RelicDraft({ offers, band, onPick, onSkip }: RelicDraftProps) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -67,12 +67,12 @@ export function RelicDraft({ offers, wave, onPick, onSkip }: RelicDraftProps) {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`Wave ${wave} salvage`}
+      aria-label={`Band ${band} salvage`}
       className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-6 bg-[var(--bg)]/92 p-6"
     >
       <div className="text-center">
         <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-[var(--amber)]">
-          Wave {wave - 1} cleared
+          Band {band - 1} cleared
         </p>
         <h2 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--fg)]">
           Salvage one instrument

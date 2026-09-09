@@ -235,7 +235,7 @@ export type AscentOutcome =
   | { kind: "progress"; platform: Platform }
   | { kind: "cleared"; platform: Platform; perfect: boolean }
   | { kind: "error"; platform: Platform; charged: boolean; expected: string; hint: boolean }
-  | { kind: "skipped"; platform: Platform }
+  | { kind: "skipped"; platform: Platform; expected: string }
   | { kind: "ignored" };
 
 /**
@@ -293,7 +293,7 @@ export function applyChar(
     if (platform.typed >= platform.word.length) {
       return { kind: "cleared", platform, perfect: false };
     }
-    return { kind: "skipped", platform };
+    return { kind: "skipped", platform, expected };
   }
 
   const charged = shouldCharge(state, char, now);

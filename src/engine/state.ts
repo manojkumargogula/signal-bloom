@@ -1,5 +1,6 @@
 import { getCorpus } from "@/data";
-import { Bag, makeRng } from "./rng";
+import { bandForHeight, createAscentState, lengthForBand } from "./modes/ascent";
+import { makeRng } from "./rng";
 import { RelicRuntime } from "./relics/runtime";
 import { BASE_STATS, type EngineContext, type GameState, type ModeId } from "./types";
 
@@ -7,7 +8,7 @@ export interface RunConfig {
   mode: ModeId;
   seed: string;
   corpusId: string;
-  /** Sprint only: run length. Ignored by Onslaught and Zen. */
+  /** Sprint only: run length. Ignored by Ascent and Zen. */
   durationMs?: number;
   /** Sprint only: fixed word count instead of a duration. */
   wordCount?: number;
@@ -20,57 +21,72 @@ export function createState(config: RunConfig): GameState {
     phase: "idle",
     simTime: 0,
     pausedMs: 0,
-    wave: 1,
-    waveClock: BASE_STATS.waveDurationMs,
-    entities: [],
-    activeId: null,
-    combo: 0,
-    comboBest: 0,
-    comboIdleMs: 0,
-    shields: BASE_STATS.maxShields,
-    score: 0,
-    decoded: 0,
-    impacted: 0,
-    perfect: 0,
+    ascent: config.mode === "ascent" ? createAscentState() : null,
     stats: { ...BASE_STATS },
     relics: [],
     draft: null,
-    nextEntityId: 1,
-    // Pre-armed, so the first transmission arrives immediately rather than
-    // after a full interval of empty sky -- which reads as broken, not calm.
-    spawnTimer: BASE_STATS.spawnIntervalMs,
-    spawnBudget: waveBudget(1),
   };
 }
 
-/** How many transmissions a wave sends before it can be cleared. */
-export function waveBudget(wave: number): number {
-  return 8 + Math.floor(wave * 2.5);
-}
-
+/**
+ * How a word is chosen for a platform.
+ *
+ * Length comes from the band, and within that band the choice is weighted by
+ * `bias`, which the engine raises when it wants to target the player's own
+ * problem bigrams. Drawing from a shuffled bag rather than sampling
+ * independently is what stops the same word appearing twice in a row, which
+ * players read as a bug rather than as randomness.
+ */
 export function createContext(config: RunConfig): EngineContext {
   const corpus = getCorpus(config.corpusId);
   const rngWords = makeRng(config.seed, "words");
-
   const pool = corpus.words.length > 0 ? corpus.words : ["signal"];
-  const bag = new Bag(pool, rngWords);
+
+  /** Words grouped by length, so a band can ask for what it needs. */
+  const byLength = new Map<number, string[]>();
+  for (const word of pool) {
+    const list = byLength.get(word.length);
+    if (list) list.push(word);
+    else byLength.set(word.length, [word]);
+  }
+
+  /** Single letters, because the corpus has almost none and the climb opens with them. */
+  const letters = "asdfghjklqwertyuiopzxcvbnm".split("");
+
+  const pick = (min: number, max: number, bias: number): string => {
+    const candidates: string[] = [];
+    for (let len = min; len <= max; len++) {
+      const list = byLength.get(len);
+      if (list) candidates.push(...list);
+    }
+    if (candidates.length === 0) return rngWords.pick(pool);
+
+    // Length bias draws a few and keeps the longest, the same trick the radar
+    // spawner used.
+    const draws = 1 + Math.round(Math.max(0, Math.min(1, bias)) * 3);
+    let best = rngWords.pick(candidates);
+    for (let i = 1; i < draws; i++) {
+      const candidate = rngWords.pick(candidates);
+      if (candidate.length > best.length) best = candidate;
+    }
+    return best;
+  };
 
   return {
     rngSpawn: makeRng(config.seed, "spawn"),
     rngWords,
     rngDraft: makeRng(config.seed, "draft"),
     rngEffect: makeRng(config.seed, "effect"),
-    drawWord: (bias: number) => {
-      // Length bias draws a few candidates and keeps the longest. Drawing
-      // from the bag rather than sampling independently is what stops the
-      // same word appearing twice in a row, which players read as a bug.
-      const draws = 1 + Math.round(Math.max(0, Math.min(1, bias)) * 3);
-      let best = bag.draw();
-      for (let i = 1; i < draws; i++) {
-        const candidate = bag.draw();
-        if (candidate.length > best.length) best = candidate;
-      }
-      return best;
+    drawWord: (band, index, bias) => {
+      // The first two platforms are single letters, then a two-letter word.
+      // The gentlest possible first contact, and the corpus has only two
+      // single-letter entries so they have to come from the alphabet.
+      if (index === 0) return rngWords.pick(letters);
+      if (index === 1) return rngWords.pick(letters);
+      if (index === 2) return pick(2, 3, 0);
+
+      const { min, max } = lengthForBand(band);
+      return pick(min, max, bias);
     },
   };
 }
@@ -78,81 +94,26 @@ export function createContext(config: RunConfig): EngineContext {
 /**
  * Difficulty curve.
  *
- * Applied on top of relic-resolved stats, so a wave escalates without
- * overwriting a player's build. Escalation is capped: past roughly wave 20 the
- * pressure comes from word length and volume rather than from speed, because
- * a transmission moving faster than the player can read is not difficulty, it
- * is a coin flip.
+ * Applied on top of relic-resolved stats, so a band escalates without
+ * overwriting a player's build. Only the flood escalates with the band here;
+ * word length is handled by `lengthForBand`, and the flood's per-platform
+ * acceleration does the rest.
  */
-export function applyWaveCurve(state: GameState): void {
-  const w = state.wave - 1;
-  const speedRamp = Math.min(1.9, 1 + w * 0.085);
-  const spawnRamp = Math.max(0.42, 1 - w * 0.055);
-
-  state.stats.approachSpeed *= speedRamp;
-  state.stats.spawnIntervalMs *= spawnRamp;
-  state.stats.maxLive = Math.min(state.stats.maxLive + Math.floor(w / 3), 14);
-  state.stats.lengthBias = Math.min(1, state.stats.lengthBias + w * 0.05);
+export function applyBandCurve(state: GameState): void {
+  if (!state.ascent) return;
+  const band = state.ascent.band - 1;
+  // A gentle extra nudge per band on top of the per-platform acceleration, so
+  // a new band is felt rather than merely announced.
+  state.stats.floodRise *= 1 + band * 0.04;
 }
 
-/** Rebuilds stats from the base table, the held relics, and the wave curve. */
+/** Rebuilds stats from the base table, the held relics, and the band curve. */
 export function refreshStats(state: GameState, runtime: RelicRuntime): void {
   state.stats = runtime.rebuild(state.relics, BASE_STATS);
-  applyWaveCurve(state);
-  state.shields = Math.min(state.shields, state.stats.maxShields);
+  applyBandCurve(state);
+  if (state.ascent) {
+    state.ascent.shields = Math.min(state.ascent.shields, state.stats.maxShields);
+  }
 }
 
-export function activeEntity(state: GameState) {
-  if (state.activeId === null) return null;
-  return state.entities.find((e) => e.id === state.activeId) ?? null;
-}
-
-export function liveEntities(state: GameState) {
-  return state.entities.filter((e) => e.status === "alive");
-}
-
-export function spawnTransmission(
-  state: GameState,
-  ctx: EngineContext,
-  kind: "normal" | "carrier" = "normal",
-): GameState["entities"][number] {
-  const word =
-    kind === "carrier"
-      ? // A carrier is the wave's pressure spike, so it wants a genuinely
-        // long word rather than a random one.
-        [ctx.drawWord(1), ctx.drawWord(1), ctx.drawWord(1)].reduce((a, b) =>
-          a.length >= b.length ? a : b,
-        )
-      : ctx.drawWord(state.stats.lengthBias);
-
-  // Contacts appear anywhere on the rim, on any bearing, with a little
-  // radial jitter so two arriving on the same bearing do not sit on top of
-  // one another.
-  const x = ctx.rngSpawn.range(-1, 1);
-  const y = ctx.rngSpawn.range(-1, 1);
-
-  const entity = {
-    id: state.nextEntityId++,
-    word,
-    typed: 0,
-    x,
-    y,
-    z: 1,
-    prevX: x,
-    prevY: y,
-    prevZ: 1,
-    speed:
-      state.stats.approachSpeed *
-      ctx.rngSpawn.range(0.85, 1.15) *
-      (kind === "carrier" ? 0.66 : 1),
-    // A slow bearing drift, so contacts curve in rather than tracking dead
-    // straight -- straight lines read as a screensaver.
-    drift: ctx.rngSpawn.range(-0.035, 0.035),
-    kind,
-    status: "alive" as const,
-    spawnedAt: state.simTime,
-  };
-
-  state.entities.push(entity);
-  return entity;
-}
+export { bandForHeight };
