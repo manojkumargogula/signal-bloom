@@ -32,10 +32,16 @@ jobs:
       - name: Regenerate derived files
         run: pnpm gen
 
-      - name: Derived files are committed and in sync
-        # Icons are generated from the hand-authored SVGs by a script. This is
-        # what stops a hand-edited PNG drifting away from its source.
-        run: git diff --exit-code
+      - name: Icons match the SVGs they come from
+        # Icons are rasterised from the hand-authored SVGs by a script, so this
+        # is what stops a hand-edited PNG drifting away from its source.
+        #
+        # Scoped to the icons on purpose. src/lib/lastmod.generated.json is
+        # derived from commit dates, which cannot be known before the commit
+        # exists -- so a page edited in this commit will always regenerate to a
+        # newer date than the one committed alongside it. That is a genuine
+        # chicken-and-egg, not an out-of-date file.
+        run: git diff --exit-code -- public/icons src/app/apple-icon.png
 
       - run: pnpm typecheck
       - run: pnpm lint

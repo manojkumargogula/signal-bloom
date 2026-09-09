@@ -21,21 +21,19 @@ const routes = [...registry.matchAll(/source:\s*"([^"]+)"/g)].map((m) => ({ sour
 
 if (routes.length === 0) throw new Error("no content routes found in src/lib/content.ts");
 
-// Deliberately NOT the build time. A wall-clock stamp would rewrite this file
-// on every run, so it could never be committed and reviewed -- and it is
-// exactly the value that must not reach the sitemap. The fallback is the
-// newest commit in the repository instead: real, and stable between builds.
-let newest = "1970-01-01T00:00:00Z";
-try {
-  newest = execFileSync("git", ["log", "-1", "--format=%cI"], {
-    cwd: root,
-    encoding: "utf8",
-  }).trim() || newest;
-} catch {
-  // Not a git checkout.
-}
-
-const out = { __build: newest };
+// Only real commit dates go in here.
+//
+// Two values were tried and both were wrong. The build time rewrites the file
+// on every run, so it can never be committed -- and it is precisely the value
+// that must not reach a sitemap, because stamping every page as changed on
+// every deploy teaches search engines to ignore the field. The newest commit
+// in the repository has the same problem for a different reason: it changes
+// with every commit, so the checked-in file is stale the moment anything
+// lands.
+//
+// A page with no commit history simply gets no date. `lastModified` is
+// optional in a sitemap, and omitting it is more honest than inventing one.
+const out = {};
 
 for (const route of routes) {
   try {
@@ -52,4 +50,4 @@ for (const route of routes) {
 
 mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, `${JSON.stringify(out, null, 2)}\n`);
-console.log(`lastmod: ${Object.keys(out).length - 1} page(s) dated from git history`);
+console.log(`lastmod: ${Object.keys(out).length} page(s) dated from git history`);
