@@ -28,9 +28,24 @@ export interface KeyLike {
   altKey: boolean;
   shiftKey: boolean;
   isComposing?: boolean;
+  /** True when the operating system is auto-repeating a held key. */
+  repeat?: boolean;
 }
 
 export function classifyKey(event: KeyLike, isFullscreen: boolean): KeyIntent {
+  /*
+   * A held key auto-repeats at roughly 30ms, and nothing was filtering it.
+   * Every one of those repeats was being recorded as a genuine keystroke,
+   * which inflates raw WPM, poisons the interkey latency figures and lets a
+   * player hold a key down to fake a score. Holding a key is not typing.
+   *
+   * Backspace is the exception: holding it to delete is a real editing
+   * gesture people expect to work.
+   */
+  if (event.repeat && event.key !== "Backspace") {
+    return { kind: "ignore", preventDefault: true };
+  }
+
   // Ctrl+Backspace and Cmd+Backspace are the one modifier combination worth
   // claiming: they are text editing, not a browser command.
   if ((event.ctrlKey || event.metaKey) && event.key === "Backspace") {

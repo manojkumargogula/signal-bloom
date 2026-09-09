@@ -10,6 +10,7 @@ const key = (over: Partial<KeyLike>): KeyLike => ({
   altKey: false,
   shiftKey: false,
   isComposing: false,
+  repeat: false,
   ...over,
 });
 
@@ -77,6 +78,21 @@ describe("classifyKey", () => {
     for (const k of ["ArrowLeft", "F5", "PageDown", "Home", "Insert"]) {
       expect(classifyKey(key({ key: k }), false).kind).toBe("passthrough");
     }
+  });
+
+  it("ignores an auto-repeating held key", () => {
+    // A held key repeats at roughly 30ms. Counting those as keystrokes
+    // inflates raw WPM, poisons the latency figures, and lets someone hold a
+    // key down to fake a score. Holding a key is not typing.
+    const intent = classifyKey(key({ key: "a", code: "KeyA", repeat: true }), false);
+    expect(intent.kind).toBe("ignore");
+    expect(intent.preventDefault).toBe(true);
+  });
+
+  it("still allows a held Backspace", () => {
+    // Holding backspace to delete is a real editing gesture, and the only
+    // repeat worth honouring.
+    expect(classifyKey(key({ key: "Backspace", repeat: true }), false).kind).toBe("backspace");
   });
 
   it("handles a multi-code-point character without splitting it", () => {

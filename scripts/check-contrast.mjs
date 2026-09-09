@@ -147,5 +147,59 @@ for (const [name, vars] of THEMES) {
   }
 }
 
+// ---------------------------------------------------------------- bands ----
+//
+// The world is colourful and changes every band, which is only safe because a
+// platform word is never set against the sky -- it sits on a slab whose colour
+// is defined alongside it. So the pairs that matter are word-on-slab and
+// edge-on-slab, and they are checked for every theme. A new band theme cannot
+// ship unreadable.
+{
+  const bands = readFileSync(new URL("../src/data/bands.ts", import.meta.url), "utf8");
+
+  // Any hex that is not plain ASCII is a typo, and one slipped in while these
+  // were being written. Cheap to catch, invisible otherwise.
+  const suspect = [...bands.matchAll(/"(#[^"]*)"/g)]
+    .map((m) => m[1])
+    .filter((hex) => !/^#[0-9a-fA-F]{3,8}$/.test(hex));
+  if (suspect.length > 0) {
+    console.log("\n  malformed colour values in bands.ts:");
+    for (const hex of suspect) {
+      console.log(`    FAIL  ${JSON.stringify(hex)}`);
+      failed++;
+    }
+  }
+
+  const themes = [
+    ...bands.matchAll(
+      /id:\s*"([^"]+)"[\s\S]*?slab:\s*"(#[0-9a-fA-F]{3,8})"[\s\S]*?slabEdge:\s*"(#[0-9a-fA-F]{3,8})"[\s\S]*?word:\s*"(#[0-9a-fA-F]{3,8})"[\s\S]*?wordDone:\s*"(#[0-9a-fA-F]{3,8})"/g,
+    ),
+  ];
+
+  if (themes.length === 0) {
+    console.log("\n  FAIL  could not parse any band themes out of bands.ts");
+    failed++;
+  } else {
+    console.log(`\n  band themes (${themes.length})`);
+    for (const [, id, slab, edge, word, done] of themes) {
+      // The word and its typed prefix are body text on the slab and carry the
+      // whole game, so both take the full 4.5:1. The lit edge is a graphic.
+      const checks = [
+        ["word on slab", word, slab, 4.5],
+        ["typed prefix on slab", done, slab, 4.5],
+        ["active frame on slab", edge, slab, 3.0],
+      ];
+      for (const [use, fg, bg, min] of checks) {
+        const r = ratio(fg, bg);
+        const ok = r >= min;
+        if (!ok) failed++;
+        console.log(
+          `    ${ok ? "ok" : "FAIL"}  ${r.toFixed(2)}:1  (need ${min})  ${id} — ${use}`,
+        );
+      }
+    }
+  }
+}
+
 console.log(failed === 0 ? "\nAll checks pass.\n" : `\n${failed} failure(s).\n`);
 process.exit(failed === 0 ? 0 : 1);
