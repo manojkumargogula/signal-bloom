@@ -82,17 +82,47 @@ export function AppShell() {
 
       {/* ---------------------------------------------------------- board -- */}
       <div className="relative min-h-0 flex-1">
-        {isClient && !result && (
+        {/* The board stays mounted after the run ends. `advance` does not step
+            the simulation once the phase is "over", so what remains on screen
+            is the frozen moment the water caught you -- with the surface still
+            lapping at it, because the render loop keeps drawing. Unmounting it
+            threw that away and replaced the world with a page of numbers. */}
+        {isClient && (
           <Game key={seed} seed={seed} corpusId={DEFAULT_CORPUS_ID} onComplete={onComplete} />
         )}
 
-        {/* The results replace the game inside the same locked viewport, with
-            no scroll container. Results is a height-constrained grid that
-            fills exactly this box, so the app is one screen from the first
-            keystroke to the final number. */}
+        {/* And the analysis is laid over it, in the same locked viewport and
+            with no scroll container. The panels are opaque, so every contrast
+            pair still holds; what shows through is the space between them,
+            which is where you drowned. */}
+        {/* `z-30` is load-bearing. The board's own field layer sits at z-10
+            and its readout strip at z-20, and because the board itself has no
+            z-index it is not a stacking context -- so those children compete
+            with this overlay directly, and both painted OVER it. The analysis
+            was drawn but unreachable: the Again button was visible and every
+            click landed on the field behind it. */}
         {result && (
-          <div className="absolute inset-0 overflow-hidden bg-[var(--bg)]">
-            <Results result={result} onAgain={again} />
+          <div className="absolute inset-0 z-30 overflow-hidden">
+            {/* The scrim. Heavy, and heavier at the top: at 78% the world
+                competed with the panels rather than sitting behind them, and
+                what the eye caught was a platform fragment in a gap reading
+                as an artifact. The gradient keeps the water -- the part that
+                says where the run ended -- the most legible thing back
+                there, and quietens the geometry above it. */}
+            <div
+              aria-hidden="true"
+              className="absolute inset-0"
+              style={{
+                background:
+                  "linear-gradient(to bottom," +
+                  " color-mix(in oklab, var(--bg) 94%, transparent) 0%," +
+                  " color-mix(in oklab, var(--bg) 90%, transparent) 55%," +
+                  " color-mix(in oklab, var(--bg) 76%, transparent) 100%)",
+              }}
+            />
+            <div className="relative h-full">
+              <Results result={result} onAgain={again} />
+            </div>
           </div>
         )}
       </div>

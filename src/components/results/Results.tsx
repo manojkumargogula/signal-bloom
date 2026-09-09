@@ -180,7 +180,13 @@ export function Results({ result, onAgain }: ResultsProps) {
         </div>
 
         {/* ---- the run --------------------------------------------------- */}
-        <div className="grid gap-3 lg:min-h-0 lg:grid-rows-[auto_minmax(0,1fr)_auto]">
+        {/* `minmax(8rem,1fr)` on the chart row and a cap on the strip below
+            it. Both are needed: the strip is content-sized, and on a short
+            screen its tallest panel ate the chart's whole row -- the plot was
+            there, in a box a hundred pixels tall, drawing nothing. A floor for
+            the chart and a ceiling for the strip means the squeeze lands on
+            the panels that can scroll instead of on the one that cannot. */}
+        <div className="grid gap-3 lg:min-h-0 lg:grid-rows-[auto_minmax(8rem,1fr)_auto]">
           <Panel>
             <Heatmap byCode={m.byCode} />
           </Panel>
@@ -189,7 +195,7 @@ export function Results({ result, onAgain }: ResultsProps) {
             <WpmChart series={m.series} />
           </Panel>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:max-h-52 xl:grid-cols-4">
             <Panel>
               <ProblemList title="Slowest keys" items={m.problemKeys} />
             </Panel>
@@ -319,9 +325,7 @@ function ErrorCounts({
             <Row label="Transpositions" value={counts.transposition} />
           </dl>
           <p className="mt-3 text-[0.68rem] leading-relaxed text-[var(--fg-faint)]">
-            A transposition is two letters swapped — counted once, though it cost two
-            keystrokes. You corrected {corrected}, which helped your speed but not your
-            accuracy.
+            You corrected {corrected}, which helped your speed but not your accuracy.
           </p>
         </>
       )}

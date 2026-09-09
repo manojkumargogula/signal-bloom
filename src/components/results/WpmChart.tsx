@@ -107,8 +107,14 @@ export function WpmChart({ series }: WpmChartProps) {
       </figcaption>
 
       {/* The plot is absolutely positioned inside the measured box, so its own
-          size can never feed back into the box it was measured from. */}
-      <div ref={plotRef} className="relative min-h-0 flex-1">
+          size can never feed back into the box it was measured from.
+
+          `min-h` and `overflow-hidden` are both load-bearing. With `min-h-0`
+          this box collapsed to nothing when the table below it was opened --
+          and an absolutely positioned child of a zero-height box does not
+          disappear, it paints outside. The chart drew straight over the table
+          it had made room for. */}
+      <div ref={plotRef} className="relative min-h-[8rem] flex-1 overflow-hidden">
         <svg
           viewBox={`0 0 ${W} ${H}`}
           width={W}

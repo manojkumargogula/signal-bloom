@@ -10,7 +10,10 @@ import { activeWord, climb, waitForResults } from "./lib/climb.mjs";
 const BASE = process.env.BASE ?? "http://localhost:3000";
 const browser = await chromium.launch();
 const page = await browser.newPage({
-  viewport: { width: 1280, height: 720 },
+  // 1440x900, not 1280x720. The analysis is a height-constrained dashboard
+  // and 720 is below what it is designed to hold, so a capture at that size
+  // showed the layout under duress rather than the layout.
+  viewport: { width: 1440, height: 900 },
   colorScheme: "dark",
   deviceScaleFactor: 2,
 });
