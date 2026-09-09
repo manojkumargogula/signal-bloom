@@ -19,6 +19,9 @@ next-env.d.ts
 /nanobanana-output/
 *.generated.ts
 *.generated.json
+# ...except the sitemap dates, which the build imports and which are derived
+# from git history, so they are stable and worth reviewing.
+!src/lib/lastmod.generated.json
 
 # misc
 .DS_Store

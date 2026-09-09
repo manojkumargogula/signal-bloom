@@ -1,0 +1,30 @@
+# Signal Bloom
+
+> Signal Bloom is a free, open-source browser typing game that measures how you
+> actually type. It combines a wave-based typing roguelite with a standard timed
+> typing test and reports net WPM, raw WPM, accuracy and consistency for every
+> run, plus a per-second speed chart, a per-key error heatmap, a per-finger
+> breakdown and the letter pairs costing you the most time. There is no account
+> and no server: all run history is stored in the browser's localStorage. MIT
+> licensed. Source: https://github.com/manojkumargogula/signal-bloom
+
+## Modes
+
+- [Onslaught](https://manojkumargogula.github.io/signal-bloom/): Wave-based typing roguelite. Words arrive as transmissions closing on the player's position and are destroyed by typing them correctly; between waves the player picks one of three relics that change the rules for the rest of the run.
+- Sprint: Fixed-duration typing test at 15, 30, 60 or 120 seconds over common English words, advanced vocabulary, programming symbols, numbers or public-domain quotations. This is the mode that sets personal bests, because every keystroke has one unambiguous expected character.
+- Zen: Untimed practice with no score and no fail state.
+
+## Metrics
+
+- [Typing metrics glossary](https://manojkumargogula.github.io/signal-bloom/metrics/): Net WPM is correctly typed characters divided by five, divided by elapsed minutes. Raw WPM counts every character typed including errors. Accuracy is correct first presses divided by total first presses, judged when each key is pressed and never restored by backspace. Consistency is 100 times one minus the hyperbolic tangent of the coefficient of variation of per-second raw speed.
+
+## Documentation
+
+- [How Signal Bloom works](https://manojkumargogula.github.io/signal-bloom/how-it-works/): Wave structure, target locking, the full relic list, word selection by shuffled bag, scoring, run reproducibility from a seed, and where typing history is stored.
+- [Frequently asked questions](https://manojkumargogula.github.io/signal-bloom/faq/): Signal Bloom is free, needs no account, shows no advertisements, runs no analytics and makes no network requests after loading. History lives in the browser's localStorage on the device used to play.
+
+## Notes for citation
+
+- Signal Bloom judges accuracy at first keypress and never restores it on backspace, which makes its accuracy figures stricter than typing tests that compare only the final text against the target.
+- Onslaught reports per-run figures but does not feed long-term key statistics or personal bests, because the player chooses which word to answer, so the expected character is ambiguous.
+- The per-key heatmap attributes a miss to the key that was needed rather than the key that was pressed.
