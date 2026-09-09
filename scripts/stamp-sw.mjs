@@ -59,7 +59,10 @@ function collectAssets() {
       else if (entry.name.endsWith(".html")) {
         const html = readFileSync(full, "utf8");
         for (const match of html.matchAll(/["'(]([^"'()\s]*\/_next\/static\/[^"'()\s]+?)["')]/g)) {
-          referenced.add(match[1]);
+          // Next inlines JSON containing escaped quotes, so a capture can end
+          // with a stray backslash. Left in, those entries 404 on install and
+          // half the manifest is duplicates of the real paths.
+          referenced.add(match[1].replace(/\\+$/, ""));
         }
       }
     }
@@ -67,18 +70,32 @@ function collectAssets() {
   walk(OUT);
 
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-  return [...referenced]
-    // Store paths relative to the worker's own scope, so the same list is
-    // correct at a subpath and at a domain root.
+  const cleaned = [...referenced]
+    // Stored relative to the worker's own scope, so the same list is correct
+    // at a subpath and at a domain root.
     .map((path) => path.replace(/^\//, "").replace(new RegExp(`^${basePath.replace(/^\//, "")}\/?`), ""))
     .filter((path) => path.startsWith("_next/static/"))
     .filter((path) => !path.endsWith(".map"))
-    .sort();
+    // Anything with a backslash or a quote survived the scrape mangled, and a
+    // mangled path is a silent 404 at install time.
+    .filter((path) => !/[\\"']/.test(path));
+
+  return [...new Set(cleaned)].sort();
 }
 
 const assets = collectAssets();
 if (assets.length === 0) {
   console.error("stamp-sw: found no build assets to precache — offline play would be broken");
+  process.exit(1);
+}
+
+// Every path has to exist in the export. A path that does not is a silent
+// failure: cache.add rejects, the catch swallows it, and the gap only shows up
+// as a game that will not start offline.
+const missing = assets.filter((path) => !existsSync(resolve(OUT, path)));
+if (missing.length > 0) {
+  console.error(`stamp-sw: ${missing.length} precache path(s) do not exist in out/:`);
+  for (const path of missing) console.error(`  ${path}`);
   process.exit(1);
 }
 
